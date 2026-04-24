@@ -1,0 +1,98 @@
+import { AnimatePresence, motion } from 'framer-motion';
+import { useState } from 'react';
+import type { Task } from '../../types/task';
+import { ProgressBar } from './ProgressBar';
+import { SubtaskList } from './SubtaskList';
+
+interface ParallelTaskCardProps {
+  task: Task;
+  onSwitchTask: (taskId: string) => void;
+  onPauseTask: (taskId: string) => void;
+  onCompleteTask: (taskId: string) => void;
+  onCompleteSubTask: (taskId: string, subTaskId: string) => void;
+  onSkipSubTask: (taskId: string, subTaskId: string) => void;
+}
+
+export function ParallelTaskCard({
+  task,
+  onSwitchTask,
+  onPauseTask,
+  onCompleteTask,
+  onCompleteSubTask,
+  onSkipSubTask
+}: ParallelTaskCardProps) {
+  const [expanded, setExpanded] = useState(false);
+  const progress = Math.min(1, task.actualDuration / Math.max(1, task.plannedDuration * 60));
+  const elapsedMinutes = Math.floor(task.actualDuration / 60);
+  const isRunning = task.status === 'active';
+
+  return (
+    <div className="rounded-[16px] border border-white/10 bg-white/[0.03] px-3 py-3">
+      <div className="mb-2 flex items-center gap-3">
+        <div
+          className={`h-2.5 w-2.5 rounded-full ${
+            task.status === 'active'
+              ? 'bg-emerald-400'
+              : task.status === 'paused'
+                ? 'bg-amber-400'
+                : 'bg-white/35'
+          }`}
+        />
+        <button
+          type="button"
+          className="min-w-0 flex-1 truncate text-left text-sm text-white/85"
+          onClick={() => onSwitchTask(task.id)}
+        >
+          {task.title}
+        </button>
+        <span className="text-[11px] text-white/45">{elapsedMinutes}/{task.plannedDuration}min</span>
+      </div>
+
+      <ProgressBar progress={progress} className="mb-2 h-1.5" />
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onPauseTask(task.id)}
+          className="rounded-full border border-white/10 bg-white/8 px-2 py-1 text-[11px] text-white/75 transition-colors hover:bg-white/14"
+        >
+          {isRunning ? '暂停' : '继续'}
+        </button>
+        <button
+          type="button"
+          onClick={() => onCompleteTask(task.id)}
+          className="rounded-full bg-emerald-500 px-2 py-1 text-[11px] font-medium text-white transition-colors hover:bg-emerald-400"
+        >
+          完成
+        </button>
+        {task.subTasks.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            className="rounded-full border border-white/10 bg-white/8 px-2 py-1 text-[11px] text-white/75 transition-colors hover:bg-white/14"
+          >
+            {expanded ? '收起' : '展开'}
+          </button>
+        )}
+      </div>
+
+      <AnimatePresence>
+        {expanded && task.subTasks.length > 0 && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="overflow-hidden pt-2"
+          >
+            <SubtaskList
+              subTasks={task.subTasks}
+              onComplete={(subTaskId) => onCompleteSubTask(task.id, subTaskId)}
+              onSkip={(subTaskId) => onSkipSubTask(task.id, subTaskId)}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
