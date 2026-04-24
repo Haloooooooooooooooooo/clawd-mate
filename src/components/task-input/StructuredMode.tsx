@@ -1,17 +1,21 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
 import { useTaskStore } from '../../stores/taskStore';
 import type { Task, SubTask } from '../../types/task';
+import { pushTaskFromIsland } from '../../lib/islandBridge';
 
 interface StructuredModeProps {
   onStart: (task: Task) => void;
   activateOnStart?: boolean;
 }
 
+const PRESET_DURATIONS = [15, 30, 45, 60, 90];
+
 export function StructuredMode({ onStart, activateOnStart = true }: StructuredModeProps) {
   const [title, setTitle] = useState('');
   const [duration, setDuration] = useState(60);
+  const [useCustom, setUseCustom] = useState(false);
   const [subTaskInputs, setSubTaskInputs] = useState<string[]>(['']);
 
   const addTask = useTaskStore((state) => state.addTask);
@@ -61,12 +65,19 @@ export function StructuredMode({ onStart, activateOnStart = true }: StructuredMo
     };
 
     addTask(task);
+    void pushTaskFromIsland({
+      title: task.title,
+      duration_minutes: task.plannedDuration,
+      mode: task.mode,
+      subtasks: validSubTasks.map((subTask) => subTask.title)
+    });
     if (activateOnStart) {
       setActiveTask(task.id);
     }
     onStart(task);
     setTitle('');
     setDuration(60);
+    setUseCustom(false);
     setSubTaskInputs(['']);
   };
 
@@ -87,17 +98,50 @@ export function StructuredMode({ onStart, activateOnStart = true }: StructuredMo
         autoFocus
       />
 
-      <div className="mb-3 flex items-center gap-2">
-        <span className="text-sm text-white/60">预设时间:</span>
-        <input
-          type="number"
-          value={duration}
-          onChange={(event) => setDuration(Math.max(1, Math.min(180, Number(event.target.value))))}
-          min={1}
-          max={180}
-          className="w-20 rounded-lg bg-white/10 px-2 py-1 text-center text-sm text-white focus:outline-none"
-        />
-        <span className="text-sm text-white/60">分钟</span>
+      <div className="mb-3">
+        <span className="mb-2 block text-sm text-white/60">预设时间</span>
+        <div className="flex flex-wrap items-center gap-2">
+          {PRESET_DURATIONS.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              onClick={() => {
+                setDuration(preset);
+                setUseCustom(false);
+              }}
+              className={`rounded-lg px-3 py-1.5 text-sm transition-all ${
+                !useCustom && duration === preset
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-white/10 text-white/70 hover:bg-white/20'
+              }`}
+            >
+              {preset}分钟
+            </button>
+          ))}
+
+          <button
+            type="button"
+            onClick={() => setUseCustom(true)}
+            className={`rounded-lg px-3 py-1.5 text-sm transition-all ${
+              useCustom
+                ? 'bg-blue-500 text-white'
+                : 'bg-white/10 text-white/70 hover:bg-white/20'
+            }`}
+          >
+            自定义
+          </button>
+
+          {useCustom && (
+            <input
+              type="number"
+              value={duration}
+              onChange={(event) => setDuration(Math.max(1, Math.min(180, Number(event.target.value))))}
+              min={1}
+              max={180}
+              className="w-20 rounded-lg bg-white/10 px-2 py-1.5 text-center text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/30"
+            />
+          )}
+        </div>
       </div>
 
       <div className="mb-3">

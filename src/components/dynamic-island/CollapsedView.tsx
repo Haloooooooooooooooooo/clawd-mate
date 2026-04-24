@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion';
+﻿import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
 import type { Task } from '../../types/task';
 import { ProgressBar } from './ProgressBar';
@@ -11,6 +11,7 @@ interface CollapsedViewProps {
   onComplete: () => void;
   onCancel: () => void;
   onExpand: () => void;
+  onCloseIsland: () => void;
 }
 
 export function CollapsedView({
@@ -20,22 +21,42 @@ export function CollapsedView({
   onPause,
   onComplete,
   onCancel,
-  onExpand
+  onExpand,
+  onCloseIsland
 }: CollapsedViewProps) {
   const [isHovering, setIsHovering] = useState(false);
   const elapsedMinutes = Math.floor(task.actualDuration / 60);
   const plannedMinutes = Math.max(1, task.plannedDuration);
 
   return (
-    <motion.button
-      type="button"
-      className="w-[280px] cursor-pointer"
+    <motion.div
+      role="button"
+      tabIndex={0}
+      className="group relative w-[280px] cursor-pointer"
       onClick={onExpand}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onExpand();
+        }
+      }}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
       whileHover={{ scale: 1.008 }}
       whileTap={{ scale: 0.99 }}
     >
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onCloseIsland();
+        }}
+        className="absolute right-2 top-2 z-20 flex h-6 w-6 items-center justify-center rounded-[6px] border border-orange-300/70 bg-orange-500/85 text-sm font-bold text-white opacity-0 scale-90 transition-all hover:bg-orange-400 group-hover:opacity-100 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:scale-100"
+        aria-label="关闭灵动岛"
+      >
+        ×
+      </button>
+
       <div className="rounded-[18px] border border-white/10 bg-black/90 px-3 py-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl">
         <div className="flex items-center gap-2.5">
           <motion.div
@@ -43,7 +64,7 @@ export function CollapsedView({
             animate={{ rotate: [0, -4, 4, 0] }}
             transition={{ duration: 2.6, repeat: Infinity, repeatDelay: 3 }}
           >
-            馃
+            🦀
           </motion.div>
 
           <div className="min-w-0 flex-1">
@@ -102,6 +123,6 @@ export function CollapsedView({
           </AnimatePresence>
         </div>
       </div>
-    </motion.button>
+    </motion.div>
   );
 }

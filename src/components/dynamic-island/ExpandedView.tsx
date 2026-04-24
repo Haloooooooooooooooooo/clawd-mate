@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+﻿import { motion } from 'framer-motion';
 import type { Task } from '../../types/task';
 import { ProgressBar } from './ProgressBar';
 import { SubtaskList } from './SubtaskList';

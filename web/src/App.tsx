@@ -4,18 +4,51 @@
  */
 
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import Sidebar from './components/layout/Sidebar';
 import Dashboard from './pages/Dashboard';
 import DailyReportView from './pages/DailyReportView';
 import { HistoryCardView } from './components/history/HistoryViews';
-import TasksIsland from './components/dashboard/TasksIsland';
+import { pullTasksForWeb } from './lib/islandBridge';
+import { useStore } from './store/useStore';
 
 export default function App() {
+  const addTask = useStore((state) => state.addTask);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncTasks = async () => {
+      const tasks = await pullTasksForWeb();
+      if (cancelled || tasks.length === 0) return;
+
+      tasks.forEach((task) => {
+        const title = task.title?.trim();
+        const duration = Number(task.duration_minutes);
+        const subtasks = Array.isArray(task.subtasks)
+          ? task.subtasks.filter((item) => typeof item === 'string' && item.trim().length > 0)
+          : [];
+
+        if (!title || !Number.isFinite(duration) || duration <= 0) return;
+        addTask(title, duration, subtasks, { source: 'sync' });
+      });
+    };
+
+    void syncTasks();
+    const timer = window.setInterval(() => {
+      void syncTasks();
+    }, 1200);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [addTask]);
+
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-main-bg">
         <Sidebar />
-        <TasksIsland />
         <main className="ml-64 min-h-screen">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />

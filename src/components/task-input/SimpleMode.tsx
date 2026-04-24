@@ -1,19 +1,21 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
 import { useTaskStore } from '../../stores/taskStore';
 import type { Task } from '../../types/task';
+import { pushTaskFromIsland } from '../../lib/islandBridge';
 
 interface SimpleModeProps {
   onStart: (task: Task) => void;
   activateOnStart?: boolean;
 }
 
-const PRESET_DURATIONS = [15, 25, 30, 45, 60];
+const PRESET_DURATIONS = [15, 30, 45, 60, 90];
 
 export function SimpleMode({ onStart, activateOnStart = true }: SimpleModeProps) {
   const [title, setTitle] = useState('');
-  const [duration, setDuration] = useState(25);
+  const [duration, setDuration] = useState(30);
+  const [useCustom, setUseCustom] = useState(false);
 
   const addTask = useTaskStore((state) => state.addTask);
   const setActiveTask = useTaskStore((state) => state.setActiveTask);
@@ -35,12 +37,19 @@ export function SimpleMode({ onStart, activateOnStart = true }: SimpleModeProps)
     };
 
     addTask(task);
+    void pushTaskFromIsland({
+      title: task.title,
+      duration_minutes: task.plannedDuration,
+      mode: task.mode,
+      subtasks: []
+    });
     if (activateOnStart) {
       setActiveTask(task.id);
     }
     onStart(task);
     setTitle('');
-    setDuration(25);
+    setDuration(30);
+    setUseCustom(false);
   };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
@@ -73,9 +82,13 @@ export function SimpleMode({ onStart, activateOnStart = true }: SimpleModeProps)
           {PRESET_DURATIONS.map((preset) => (
             <button
               key={preset}
-              onClick={() => setDuration(preset)}
+              type="button"
+              onClick={() => {
+                setDuration(preset);
+                setUseCustom(false);
+              }}
               className={`rounded-lg px-3 py-1.5 text-sm transition-all ${
-                duration === preset
+                !useCustom && duration === preset
                   ? 'bg-blue-500 text-white'
                   : 'bg-white/10 text-white/70 hover:bg-white/20'
               }`}
@@ -83,14 +96,29 @@ export function SimpleMode({ onStart, activateOnStart = true }: SimpleModeProps)
               {preset}分钟
             </button>
           ))}
-          <input
-            type="number"
-            value={duration}
-            onChange={(event) => setDuration(Math.max(1, Math.min(180, Number(event.target.value))))}
-            min={1}
-            max={180}
-            className="w-16 rounded-lg bg-white/10 px-2 py-1.5 text-center text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/30"
-          />
+
+          <button
+            type="button"
+            onClick={() => setUseCustom(true)}
+            className={`rounded-lg px-3 py-1.5 text-sm transition-all ${
+              useCustom
+                ? 'bg-blue-500 text-white'
+                : 'bg-white/10 text-white/70 hover:bg-white/20'
+            }`}
+          >
+            自定义
+          </button>
+
+          {useCustom && (
+            <input
+              type="number"
+              value={duration}
+              onChange={(event) => setDuration(Math.max(1, Math.min(180, Number(event.target.value))))}
+              min={1}
+              max={180}
+              className="w-20 rounded-lg bg-white/10 px-2 py-1.5 text-center text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/30"
+            />
+          )}
         </div>
       </div>
 

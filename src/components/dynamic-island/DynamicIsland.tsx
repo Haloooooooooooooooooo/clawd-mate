@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTaskStore } from '../../stores/taskStore';
 import { useTimer } from '../../hooks/useTimer';
@@ -11,13 +11,15 @@ interface DynamicIslandProps {
   onLayoutModeChange?: (mode: 'idle' | 'collapsed' | 'expanded') => void;
   composerOpen?: boolean;
   expandOnTaskStartKey?: number;
+  onRequestClose?: () => void;
 }
 
 export function DynamicIsland({
   onRequestCreate,
   onLayoutModeChange,
   composerOpen = false,
-  expandOnTaskStartKey = 0
+  expandOnTaskStartKey = 0,
+  onRequestClose
 }: DynamicIslandProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const islandRootRef = useRef<HTMLDivElement>(null);
@@ -176,6 +178,24 @@ export function DynamicIsland({
     setActiveTask(null);
   };
 
+  const handleCloseIsland = async () => {
+    setIsExpanded(false);
+    onRequestClose?.();
+
+    try {
+      await fetch('http://127.0.0.1:43141/island/hide', { method: 'POST' });
+    } catch {
+      // Ignore bridge errors and still try local hide.
+    }
+
+    try {
+      const tauriWindow = await import('@tauri-apps/api/window');
+      await tauriWindow.getCurrentWindow().hide();
+    } catch {
+      // Ignore when running in browser-only mode.
+    }
+  };
+
   const handleCompleteSubTask = (taskId: string, subTaskId: string) => {
     completeSubTask(taskId, subTaskId);
   };
@@ -189,11 +209,29 @@ export function DynamicIsland({
 
     if (activeOrPausedTasks.length > 0) {
       return (
-        <button
-          type="button"
-          className="w-full max-w-[408px] rounded-[18px] border border-white/12 bg-black/88 px-4 py-3 text-left shadow-[0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl"
+        <div
+          role="button"
+          tabIndex={0}
+          className="group relative w-full max-w-[408px] rounded-[18px] border border-white/12 bg-black/88 px-4 py-3 text-left shadow-[0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl"
           onClick={() => setActiveTask(activeOrPausedTasks[0].id)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              setActiveTask(activeOrPausedTasks[0].id);
+            }
+          }}
         >
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              void handleCloseIsland();
+            }}
+            className="absolute right-2 top-2 z-20 flex h-6 w-6 items-center justify-center rounded-[6px] border border-orange-300/70 bg-orange-500/85 text-sm font-bold text-white opacity-0 scale-90 transition-all hover:bg-orange-400 group-hover:opacity-100 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:scale-100"
+            aria-label="关闭灵动岛"
+          >
+            ×
+          </button>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 via-rose-500 to-orange-400 text-xl shadow-[0_8px_24px_rgba(244,114,182,0.35)]">
               🦀
@@ -203,20 +241,38 @@ export function DynamicIsland({
               <div className="text-xs text-white/50">{activeOrPausedTasks.length} tasks are available</div>
             </div>
           </div>
-        </button>
+        </div>
       );
     }
 
     return (
-      <motion.button
-        type="button"
+      <motion.div
+        role="button"
+        tabIndex={0}
         onClick={onRequestCreate}
-        className={`w-full max-w-[408px] border border-white/12 bg-black/88 px-4 py-3 text-left shadow-[0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl ${
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onRequestCreate?.();
+          }
+        }}
+        className={`group relative w-full max-w-[408px] border border-white/12 bg-black/88 px-4 py-3 text-left shadow-[0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl ${
           composerOpen ? 'rounded-t-[18px] rounded-b-none border-b-0' : 'rounded-[18px]'
         }`}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
       >
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            void handleCloseIsland();
+          }}
+          className="absolute right-2 top-2 z-20 flex h-6 w-6 items-center justify-center rounded-[6px] border border-orange-300/70 bg-orange-500/85 text-sm font-bold text-white opacity-0 scale-90 transition-all hover:bg-orange-400 group-hover:opacity-100 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:scale-100"
+          aria-label="关闭灵动岛"
+        >
+          ×
+        </button>
         <div className="flex items-center gap-3">
           <motion.div
             className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 via-rose-500 to-orange-400 text-xl shadow-[0_8px_24px_rgba(244,114,182,0.35)]"
@@ -230,7 +286,7 @@ export function DynamicIsland({
             <div className="text-xs text-white/50">Desktop island is waiting</div>
           </div>
         </div>
-      </motion.button>
+      </motion.div>
     );
   }
 
@@ -289,6 +345,7 @@ export function DynamicIsland({
               onComplete={handleComplete}
               onCancel={handleCancel}
               onExpand={() => setIsExpanded(true)}
+              onCloseIsland={handleCloseIsland}
             />
           </motion.div>
         )}
@@ -296,3 +353,4 @@ export function DynamicIsland({
     </div>
   );
 }
+

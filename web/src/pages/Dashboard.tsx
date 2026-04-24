@@ -5,9 +5,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
-import { Plus, Play, Pause, CheckCircle2, X, ChevronRight, ChevronLeft, SkipForward, Menu } from 'lucide-react';
+import { Plus, Play, Pause, CheckCircle2, X, ChevronRight, SkipForward, Menu } from 'lucide-react';
 import { cn, formatTime } from '../lib/utils';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 
 export default function Dashboard() {
   const { tasks, addTask, updateRemainingTime, completeTask, cancelTask, toggleSubtask, skipSubtask, history, addTimeToTask } = useStore();

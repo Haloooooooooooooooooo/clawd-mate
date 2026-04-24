@@ -1,36 +1,85 @@
-# ClawdMate 进度记录
+﻿# ClawdMate 进度记录
 
-> 最后更新：2026-04-22  
-> 依据：`docs/island-implementation.md`
+> 最后更新：2026-04-24  
+> 记录范围：Web 端 + Tauri 灵动岛联动改造
 
-## 本轮按需完成（最新）
+## 今日完成（2026-04-24）
 
-1. 新增任务不替换主任务  
-- `TaskInput` 增加 `keepCurrentActiveTask` 参数。  
-- 从“添加任务”入口创建的新任务改为 `active` 立即开始（不抢占当前 `activeTaskId`）。  
-- 当前主任务保持不变，新增任务作为并行任务存在。  
+1. 明确并统一“灵动岛”目标
+- 已确认目标为 `tauri` 目录下的桌面灵动岛，而非 Web 页面内嵌替代组件。
+- 已删除 Web 端替代灵动岛组件，避免误操作与混淆。
 
-2. 主任务无子任务时隐藏子任务栏  
-- `ExpandedView` 中改为条件渲染：`task.subTasks.length > 0` 才显示 `Subtasks` 区块。  
+2. 完成灵动岛显示/隐藏联动（Web <-> Tauri）
+- Web 侧“召唤灵动岛 / 关闭灵动岛”按钮通过本地桥接接口控制 Tauri 窗口显示状态。
+- Web 侧增加轮询同步，能够反映灵动岛当前可见状态。
+- 灵动岛侧关闭动作已回传桥接接口，Web 按钮状态会同步回“未启动”状态。
 
-3. 添加任务弹框右上角改为“取消”  
-- `App` 中弹框右上角按钮文案改为 `取消`。  
-- 点击仅关闭弹框，表示取消本次新增任务，不影响当前主任务。  
+3. 完成收起态右上角关闭按钮（X）
+- 在 Tauri 灵动岛收起态补充右上角 `X` 关闭按钮。
+- 按需求调整为“仅悬浮/聚焦时显示”。
 
-## 相关改动文件
+4. 任务预设时间已统一
+- 极简模式、结构模式预设时间已改为：`15 / 30 / 45 / 60 / 90 / 自定义`。
 
-- `src/components/task-input/TaskInput.tsx`
+5. 完成任务双向同步基础链路（创建）
+- Web 新建任务：推送到桥接服务，Tauri 端可拉取并创建任务。
+- Tauri 新建任务：推送到桥接服务，Web 端可拉取并创建任务。
+- 双向采用 `/tasks/create` + `/tasks/pull` 队列化接口，避免直接耦合。
+
+6. 修复与清理
+- 清理了一批影响构建/检查的前端无用引用。
+- 保留现有业务逻辑与页面结构，仅做联动与视觉相关层面的修改。
+
+## 当前状态
+
+1. 已达成
+- 灵动岛显示/隐藏联动可用。
+- 收起态 `X` 关闭能力已接入。
+- Web 与 Tauri 的“任务创建”双向同步主流程可用。
+
+2. 仍需验证/补强
+- 端到端联调验证（多轮创建、切换状态、异常恢复）还需要完整跑一遍。
+- Rust 端在当前环境未执行 `cargo` 编译校验（本机命令不可用）。
+
+## 今日变更重点文件
+
+- `src-tauri/src/lib.rs`
+- `src/App.tsx`
+- `src/lib/islandBridge.ts`
+- `src/components/dynamic-island/DynamicIsland.tsx`
+- `src/components/dynamic-island/CollapsedView.tsx`
 - `src/components/task-input/SimpleMode.tsx`
 - `src/components/task-input/StructuredMode.tsx`
-- `src/components/dynamic-island/ExpandedView.tsx`
-- `src/App.tsx`
+- `web/src/App.tsx`
+- `web/src/lib/islandBridge.ts`
+- `web/src/store/useStore.ts`
+- `web/src/components/layout/Sidebar.tsx`
+- `web/src/components/dashboard/TasksIsland.tsx`（已删除）
 
-## 验收清单（你现在可检查）
+## 明天任务清单（2026-04-25）
 
-1. 展开灵动岛，点击“添加任务”，新建并开始后：当前主任务不被替换。  
-2. 当前主任务没有子任务时：展开页不再出现 Subtasks 区块。  
-3. 添加任务弹框右上角显示“取消”，点击后弹框关闭且不新增任务。  
+1. 完成联调验收清单（高优先）
+- 验证“Web 召唤 -> Tauri 显示 -> Tauri 关闭 -> Web 状态回写”全链路。
+- 验证“Web 创建任务 -> Tauri 同步显示”与“Tauri 创建任务 -> Web 同步创建”。
+- 连续多次操作验证无重复创建、无状态错乱。
 
-## 校验结果
+2. 增强同步稳定性（高优先）
+- 增加去重策略（例如 task 指纹或同步 ID），避免边界情况下重复入队。
+- 增加失败重试与超时保护，补充桥接不可达时的 UI 提示。
 
-- `npm run lint` 通过（0 error，保留既有 3 条 hook warning）。  
+3. 完成 Tauri 侧可运行校验（高优先）
+- 在可用 Rust 环境执行 `cargo check` / `cargo build`。
+- 修复编译或类型问题并回归验证。
+
+4. 同步状态范围扩展（中优先）
+- 从“仅创建同步”扩展到关键状态同步（暂停/继续/完成/取消）的设计与实现评估。
+- 输出最小可行同步矩阵（哪些状态必须双向、哪些可单向）。
+
+5. 文档与发布准备（中优先）
+- 更新 `docs/island-implementation.md` 与 `docs/implementation-plan.md` 的联动章节。
+- 补充本地启动与联调说明，便于复现和验收。
+
+## 风险与阻塞
+
+- 当前环境缺少 `cargo` 命令，影响 Tauri/Rust 本地编译验证。
+- 双端轮询同步在极端情况下可能出现重复写入，需要去重机制兜底。

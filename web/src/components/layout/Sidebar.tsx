@@ -4,17 +4,39 @@
  */
 
 import { useState } from 'react';
+import { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, History, FileText, LogOut, Plus, LogIn, Zap } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { useStore } from '../../store/useStore';
+import { getIslandState } from '../../lib/islandBridge';
 
 export default function Sidebar() {
   const [showLogout, setShowLogout] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const { isLoggedIn, user, setLoggedIn, toggleIsland, isIslandVisible } = useStore();
+  const { isLoggedIn, user, setLoggedIn, toggleIsland, isIslandVisible, setIslandVisible } = useStore();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncState = async () => {
+      const visible = await getIslandState();
+      if (cancelled || visible === null) return;
+      setIslandVisible(visible);
+    };
+
+    void syncState();
+    const interval = window.setInterval(() => {
+      void syncState();
+    }, 1200);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [setIslandVisible]);
 
   const navItems = [
     { name: '今日任务', path: '/dashboard', icon: LayoutDashboard },

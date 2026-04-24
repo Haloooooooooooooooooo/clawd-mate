@@ -1,8 +1,10 @@
-import { useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { v4 as uuidv4 } from 'uuid';
 import { DynamicIsland } from './components/dynamic-island/DynamicIsland';
 import { TaskInput } from './components/task-input/TaskInput';
 import { useTaskStore } from './stores/taskStore';
+import { pullTasksForIsland } from './lib/islandBridge';
 
 const FRAME_BASE_HEIGHT = 220;
 const FRAME_EXPANDED_HEIGHT = FRAME_BASE_HEIGHT * 3; // 660
@@ -12,9 +14,76 @@ function App() {
   const [showInput, setShowInput] = useState(false);
   const [expandOnTaskStartKey, setExpandOnTaskStartKey] = useState(0);
   const activeTaskId = useTaskStore((state) => state.activeTaskId);
+  const addTask = useTaskStore((state) => state.addTask);
+  const setActiveTask = useTaskStore((state) => state.setActiveTask);
   const hasActiveTask = useTaskStore((state) =>
     state.tasks.some((task) => task.id === activeTaskId && task.status !== 'completed')
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncTasks = async () => {
+      const incoming = await pullTasksForIsland();
+      if (cancelled || incoming.length === 0) return;
+
+      const storeState = useTaskStore.getState();
+      const hasCurrentActive = storeState.tasks.some(
+        (task) => task.id === storeState.activeTaskId && task.status === 'active'
+      );
+
+      incoming.forEach((item, index) => {
+        const title = item.title?.trim();
+        const plannedDuration = Number(item.duration_minutes);
+        const subtaskTitles = Array.isArray(item.subtasks)
+          ? item.subtasks.filter((subtask) => typeof subtask === 'string' && subtask.trim().length > 0)
+          : [];
+
+        if (!title || !Number.isFinite(plannedDuration) || plannedDuration <= 0) {
+          return;
+        }
+
+        const taskId = uuidv4();
+        const shouldActivate = !hasCurrentActive && index === 0;
+
+        addTask({
+          id: taskId,
+          title,
+          mode: subtaskTitles.length > 0 ? 'structured' : 'simple',
+          status: shouldActivate ? 'active' : 'paused',
+          plannedDuration,
+          actualDuration: 0,
+          startedAt: shouldActivate ? new Date() : null,
+          completedAt: null,
+          subTasks: subtaskTitles.map((subtaskTitle, subtaskIndex) => ({
+            id: uuidv4(),
+            title: subtaskTitle,
+            order: subtaskIndex,
+            status: shouldActivate && subtaskIndex === 0 ? 'active' : 'pending',
+            duration: 0,
+            startedAt: shouldActivate && subtaskIndex === 0 ? new Date() : null,
+            completedAt: null
+          })),
+          createdAt: new Date()
+        });
+
+        if (shouldActivate) {
+          setActiveTask(taskId);
+          setExpandOnTaskStartKey((value) => value + 1);
+        }
+      });
+    };
+
+    void syncTasks();
+    const timer = window.setInterval(() => {
+      void syncTasks();
+    }, 1200);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activeTaskId, addTask, setActiveTask]);
 
   const handleTaskStart = () => {
     setShowInput(false);
@@ -29,6 +98,10 @@ function App() {
     setShowInput(false);
   };
 
+  const handleIslandClose = () => {
+    setShowInput(false);
+  };
+
   const composerOpen = showInput;
   const composerHeight = hasActiveTask ? FRAME_COMPACT_HEIGHT : FRAME_EXPANDED_HEIGHT;
 
@@ -39,6 +112,7 @@ function App() {
           onRequestCreate={handleShowInput}
           composerOpen={composerOpen}
           expandOnTaskStartKey={expandOnTaskStartKey}
+          onRequestClose={handleIslandClose}
         />
 
         <AnimatePresence>

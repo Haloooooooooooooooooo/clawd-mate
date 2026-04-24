@@ -5,7 +5,8 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Task, Subtask, TaskStatus, DailyRecord, User } from '../types';
+import { Task, TaskStatus, DailyRecord, User } from '../types';
+import { pushTaskFromWeb, setIslandVisibility } from '../lib/islandBridge';
 
 interface AppState {
   tasks: Task[]; // Active or today's tasks
@@ -16,7 +17,12 @@ interface AppState {
   isIslandVisible: boolean;
   
   // Actions
-  addTask: (title: string, durationMinutes: number, subtasks: string[]) => void;
+  addTask: (
+    title: string,
+    durationMinutes: number,
+    subtasks: string[],
+    options?: { source?: 'local' | 'sync' }
+  ) => void;
   updateTaskStatus: (id: string, status: TaskStatus) => void;
   updateRemainingTime: (id: string, delta: number) => void;
   toggleSubtask: (id: string, subtaskId: string) => void;
@@ -28,6 +34,7 @@ interface AppState {
   addTimeToTask: (id: string, minutes: number) => void;
   setLoggedIn: (isLoggedIn: boolean, user?: User | null) => void;
   toggleIsland: () => void;
+  setIslandVisible: (visible: boolean) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -40,7 +47,7 @@ export const useStore = create<AppState>()(
       isLoggedIn: true,
       isIslandVisible: false,
 
-      addTask: (title, durationMinutes, subtaskTitles) => set((state) => {
+      addTask: (title, durationMinutes, subtaskTitles, options) => set((state) => {
         const newTask: Task = {
           id: Math.random().toString(36).substring(7),
           title,
@@ -55,6 +62,16 @@ export const useStore = create<AppState>()(
           })),
           createdAt: Date.now()
         };
+
+        if (options?.source !== 'sync') {
+          void pushTaskFromWeb({
+            title: newTask.title,
+            duration_minutes: durationMinutes,
+            mode: subtaskTitles.length > 0 ? 'structured' : 'simple',
+            subtasks: subtaskTitles
+          });
+        }
+
         return { 
           tasks: [...state.tasks, newTask],
           activeTaskId: newTask.id 
@@ -183,7 +200,14 @@ export const useStore = create<AppState>()(
 
       setLoggedIn: (isLoggedIn, user = null) => set({ isLoggedIn, user: isLoggedIn ? (user || { name: 'Alex', email: 'alex@example.com', avatar: 'AL' }) : null }),
 
-      toggleIsland: () => set((state) => ({ isIslandVisible: !state.isIslandVisible }))
+      toggleIsland: () =>
+        set((state) => {
+          const nextVisible = !state.isIslandVisible;
+          void setIslandVisibility(nextVisible);
+          return { isIslandVisible: nextVisible };
+        }),
+
+      setIslandVisible: (visible) => set({ isIslandVisible: visible })
     }),
     {
       name: 'clawdmate-storage-prod',
