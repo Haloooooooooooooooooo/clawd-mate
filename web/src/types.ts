@@ -31,6 +31,7 @@ export interface DailyRecord {
 }
 
 export interface User {
+  id?: string;
   name: string;
   email: string;
   avatar: string; // Initials or URL

@@ -14,14 +14,6 @@ import { useStore } from './store/useStore';
 
 export default function App() {
   const applyBridgeTask = useStore((state) => state.applyBridgeTask);
-  const clearTodayHistory = useStore((state) => state.clearTodayHistory);
-
-  useEffect(() => {
-    const flagKey = '__clawdmate_clear_today_history_once_2026_04_25';
-    if (window.localStorage.getItem(flagKey) === 'done') return;
-    clearTodayHistory();
-    window.localStorage.setItem(flagKey, 'done');
-  }, [clearTodayHistory]);
 
   useEffect(() => {
     let cancelled = false;

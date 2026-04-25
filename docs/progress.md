@@ -83,3 +83,36 @@
 
 - 当前环境缺少 `cargo` 命令，影响 Tauri/Rust 本地编译验证。
 - 双端轮询同步在极端情况下可能出现重复写入，需要去重机制兜底。
+
+## Supabase 登录注册任务清单（2026-04-25）
+
+✅ 1. Supabase 接入准备（本地）  
+- 已新增 `web/.env.example`，预留 `VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY`。  
+- 待你在 Supabase 控制台创建项目后填入真实值（本地 `.env`）。
+
+✅ 2. Supabase Auth 配置文档（邮箱注册/登录）  
+- 已新增 `docs/supabase-auth-and-schema.md`，包含控制台配置步骤：开启邮箱登录、关闭邮箱验证。  
+- 待你在 Supabase 控制台按文档执行（执行后该项即完全落地）。
+
+✅ 3. 数据模型与 RLS 脚本（数据库安全策略）  
+- 已新增 `docs/supabase-schema.sql`，包含 `profiles`、`tasks`、`subtasks`、`task_history` 建表脚本。  
+- 已包含 RLS 与 `auth.uid() = user_id` 策略。  
+- 待你在 Supabase SQL Editor 执行脚本。
+
+✅ 4. 前端认证接入（Web）
+- 已接入 Supabase 客户端。
+- 已实现注册/登录/退出（邮箱模式）。
+- 已维护登录态，并通过 Supabase 会话驱动游客/登录模式切换。
+
+✅ 5. 游客模式会话数据
+- 已将 Web 端持久化存储切换为 `sessionStorage`。
+- 游客关闭浏览器后，本地任务与历史会清空。
+
+✅ 6. 登录模式云端数据
+- 已实现登录后任务与历史从 Supabase 拉取（覆盖本地会话态）。
+- 已实现任务与历史变更自动回写 Supabase（节流同步）。
+- 历史页面读取的是 store 数据，登录时来源为数据库快照。
+
+7. 任务流联调与回归
+- 验证主任务/并行任务、子任务、完成/取消在登录模式下正确入库。
+- 验证游客与登录模式切换行为正确。

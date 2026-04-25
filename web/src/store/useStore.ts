@@ -4,9 +4,10 @@
  */
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import { Task, TaskStatus, DailyRecord, User, SubtaskStatus } from '../types';
 import { BridgeTaskPayload, pushTaskFromWeb, setIslandVisibility } from '../lib/islandBridge';
+import { loadCloudSnapshot, saveCloudSnapshot } from '../lib/taskRepository';
 
 type BridgeTaskStatus = 'active' | 'paused' | 'completed' | 'cancelled';
 type AddTaskOptions = {
@@ -125,9 +126,67 @@ interface AppState {
   cancelTask: (id: string) => void;
   addTimeToTask: (id: string, minutes: number) => void;
   clearTodayHistory: () => void;
-  setLoggedIn: (isLoggedIn: boolean, user?: User | null) => void;
+  setLoggedIn: (
+    isLoggedIn: boolean,
+    user?: User | null,
+    options?: { clearDataOnLogout?: boolean }
+  ) => void;
+  hydrateCloudData: (userId: string) => Promise<void>;
+  syncCloudData: (options?: { historyOnly?: boolean }) => Promise<void>;
   toggleIsland: () => void;
   setIslandVisible: (visible: boolean) => void;
+}
+
+let cloudSyncTimer: number | undefined;
+
+function queueCloudSync(options?: { historyOnly?: boolean }) {
+  if (cloudSyncTimer) {
+    window.clearTimeout(cloudSyncTimer);
+  }
+  cloudSyncTimer = window.setTimeout(() => {
+    const state = useStore.getState();
+    void state.syncCloudData(options);
+  }, 400);
+}
+
+function getGuestStorage() {
+  return createJSONStorage(() => localStorage);
+}
+
+function mergeHistoryRecords(localHistory: DailyRecord[], cloudHistory: DailyRecord[]): DailyRecord[] {
+  const allTasks = [...cloudHistory.flatMap((record) => record.tasks), ...localHistory.flatMap((record) => record.tasks)];
+  const unique = new Map<string, Task>();
+
+  allTasks.forEach((task) => {
+    const normalizedSubtasks = task.subtasks
+      .map((subtask) => `${subtask.title.trim()}#${subtask.status}`)
+      .join('||');
+    // Use a business fingerprint instead of task.id.
+    // Same record from local/cloud can have different ids.
+    const key = [
+      task.title.trim(),
+      task.status,
+      String(task.createdAt),
+      String(task.totalDuration),
+      String(task.remainingTime),
+      normalizedSubtasks
+    ].join('|');
+    if (!unique.has(key)) {
+      unique.set(key, task);
+    }
+  });
+
+  const grouped = new Map<string, Task[]>();
+  Array.from(unique.values()).forEach((task) => {
+    const date = new Date(task.createdAt).toISOString().split('T')[0];
+    const list = grouped.get(date) || [];
+    list.push(task);
+    grouped.set(date, list);
+  });
+
+  return Array.from(grouped.entries())
+    .sort((a, b) => (a[0] > b[0] ? -1 : 1))
+    .map(([date, tasks]) => ({ date, tasks }));
 }
 
 export const useStore = create<AppState>()(
@@ -140,8 +199,8 @@ export const useStore = create<AppState>()(
       lastFocusSyncAt: 0,
       lastBridgeSyncAt: 0,
       activeTaskId: null,
-      user: { name: 'Alex', email: 'alex@example.com', avatar: 'AL' },
-      isLoggedIn: true,
+      user: null,
+      isLoggedIn: false,
       isIslandVisible: false,
 
       addTask: (title, durationMinutes, subtaskTitles, options) => set((state) => {
@@ -175,10 +234,14 @@ export const useStore = create<AppState>()(
             (task) => task.id === state.activeTaskId && (task.status === 'running' || task.status === 'paused')
           );
         const shouldSwitchActive = !hasFocusedTask;
-        return {
+        const nextState = {
           tasks: [...state.tasks, newTask],
           activeTaskId: shouldSwitchActive ? newTask.id : state.activeTaskId
         };
+        if (state.isLoggedIn && state.user?.id) {
+          queueCloudSync();
+        }
+        return nextState;
       }),
 
       applyBridgeTask: (payload) => set((state) => {
@@ -229,16 +292,20 @@ export const useStore = create<AppState>()(
           : [];
 
         if (!canApplyTaskUpdate) {
-          return {
+          const nextState = {
             ...state,
             lastBridgeSyncAt: now
           };
+          if (state.isLoggedIn && state.user?.id) {
+            queueCloudSync();
+          }
+          return nextState;
         }
 
         const existingTask = state.tasks.find((task) => task.syncId === syncId);
         if (!existingTask) {
           if (isTerminal) {
-            return {
+            const nextState = {
               ...state,
               lastBridgeSyncAt: now,
               lastTaskSyncAtById: {
@@ -247,9 +314,13 @@ export const useStore = create<AppState>()(
               },
               lastFocusSyncAt: canApplyFocus ? incomingUpdatedAt : state.lastFocusSyncAt
             };
+            if (state.isLoggedIn && state.user?.id) {
+              queueCloudSync();
+            }
+            return nextState;
           }
           if (isClosedSync) {
-            return {
+            const nextState = {
               ...state,
               lastBridgeSyncAt: now,
               lastTaskSyncAtById: {
@@ -258,6 +329,10 @@ export const useStore = create<AppState>()(
               },
               lastFocusSyncAt: canApplyFocus ? incomingUpdatedAt : state.lastFocusSyncAt
             };
+            if (state.isLoggedIn && state.user?.id) {
+              queueCloudSync();
+            }
+            return nextState;
           }
           const createdTask: Task = {
             id: Math.random().toString(36).substring(7),
@@ -274,7 +349,7 @@ export const useStore = create<AppState>()(
             })),
             createdAt: Date.now()
           };
-          return {
+          const nextState = {
             tasks: [...state.tasks, createdTask],
             activeTaskId: canApplyFocus ? createdTask.id : (state.activeTaskId || createdTask.id),
             lastBridgeSyncAt: now,
@@ -284,6 +359,10 @@ export const useStore = create<AppState>()(
             },
             lastFocusSyncAt: canApplyFocus ? incomingUpdatedAt : state.lastFocusSyncAt
           };
+          if (state.isLoggedIn && state.user?.id) {
+            queueCloudSync();
+          }
+          return nextState;
         }
 
         const shouldIgnorePauseOnFocusedTask =
@@ -300,7 +379,7 @@ export const useStore = create<AppState>()(
             status: mappedStatus,
             endTime: Date.now()
           };
-          return {
+          const nextState = {
             tasks: state.tasks.filter((task) => task.id !== existingTask.id),
             activeTaskId:
               state.activeTaskId === existingTask.id
@@ -309,7 +388,7 @@ export const useStore = create<AppState>()(
             history: appendHistory(state.history, finalizedTask),
             closedSyncIds: {
               ...state.closedSyncIds,
-              [syncId]: mappedStatus
+              [syncId]: mappedStatus as 'done' | 'cancelled'
             },
             lastBridgeSyncAt: now,
             lastTaskSyncAtById: {
@@ -318,9 +397,13 @@ export const useStore = create<AppState>()(
             },
             lastFocusSyncAt: canApplyFocus ? incomingUpdatedAt : state.lastFocusSyncAt
           };
+          if (state.isLoggedIn && state.user?.id) {
+            queueCloudSync();
+          }
+          return nextState;
         }
 
-        return {
+        const nextState = {
           tasks: state.tasks.map((task) =>
             task.id === existingTask.id
               ? {
@@ -345,25 +428,39 @@ export const useStore = create<AppState>()(
           },
           lastFocusSyncAt: canApplyFocus ? incomingUpdatedAt : state.lastFocusSyncAt
         };
+        if (state.isLoggedIn && state.user?.id) {
+          queueCloudSync();
+        }
+        return nextState;
       }),
 
       updateTaskStatus: (id, status) => {
         set((state) => ({
           tasks: state.tasks.map((task) => (task.id === id ? { ...task, status } : task))
         }));
+        const stateAfterUpdate = get();
+        if (stateAfterUpdate.isLoggedIn && stateAfterUpdate.user?.id) {
+          queueCloudSync();
+        }
         const updatedTask = get().tasks.find((task) => task.id === id);
         if (updatedTask) {
           void pushTaskFromWeb(buildBridgePayload(updatedTask, status));
         }
       },
 
-      updateRemainingTime: (id, delta) => set((state) => ({
-        tasks: state.tasks.map((task) =>
-          task.id === id && task.status === 'running'
-            ? { ...task, remainingTime: Math.max(0, task.remainingTime - delta) }
-            : task
-        )
-      })),
+      updateRemainingTime: (id, delta) => {
+        set((state) => ({
+          tasks: state.tasks.map((task) =>
+            task.id === id && task.status === 'running'
+              ? { ...task, remainingTime: Math.max(0, task.remainingTime - delta) }
+              : task
+          )
+        }));
+        const stateAfterUpdate = get();
+        if (stateAfterUpdate.isLoggedIn && stateAfterUpdate.user?.id) {
+          queueCloudSync();
+        }
+      },
 
       toggleSubtask: (id, subtaskId) => {
         const task = get().tasks.find((item) => item.id === id);
@@ -454,10 +551,16 @@ export const useStore = create<AppState>()(
         }
       },
 
-      deleteTask: (id) => set((state) => ({
-        tasks: state.tasks.filter((task) => task.id !== id),
-        activeTaskId: state.activeTaskId === id ? null : state.activeTaskId
-      })),
+      deleteTask: (id) => {
+        set((state) => ({
+          tasks: state.tasks.filter((task) => task.id !== id),
+          activeTaskId: state.activeTaskId === id ? null : state.activeTaskId
+        }));
+        const stateAfterUpdate = get();
+        if (stateAfterUpdate.isLoggedIn && stateAfterUpdate.user?.id) {
+          queueCloudSync();
+        }
+      },
 
       setActiveTask: (id) => {
         const prevActiveTaskId = get().activeTaskId;
@@ -488,6 +591,10 @@ export const useStore = create<AppState>()(
 
         const taskToSync = get().tasks.find((item) => item.id === id);
         if (!taskToSync) return;
+        const stateAfterUpdate = get();
+        if (stateAfterUpdate.isLoggedIn && stateAfterUpdate.user?.id) {
+          queueCloudSync();
+        }
         void pushTaskFromWeb(buildBridgePayload(taskToSync, 'running', true));
       },
 
@@ -498,15 +605,19 @@ export const useStore = create<AppState>()(
         const finalizedTask: Task = { ...task, status: 'done', endTime: Date.now() };
         void pushTaskFromWeb(buildBridgePayload(finalizedTask, 'done'));
         const syncId = task.syncId || task.id;
-        return {
+        const nextState = {
           tasks: state.tasks.filter((item) => item.id !== id),
           activeTaskId: state.activeTaskId === id ? null : state.activeTaskId,
           history: appendHistory(state.history, finalizedTask),
           closedSyncIds: {
             ...state.closedSyncIds,
             [syncId]: 'done'
-          }
+          } as Record<string, 'done' | 'cancelled'>
         };
+        if (state.isLoggedIn && state.user?.id) {
+          queueCloudSync();
+        }
+        return nextState;
       }),
 
       cancelTask: (id) => set((state) => {
@@ -516,15 +627,19 @@ export const useStore = create<AppState>()(
         const finalizedTask: Task = { ...task, status: 'cancelled', endTime: Date.now() };
         void pushTaskFromWeb(buildBridgePayload(finalizedTask, 'cancelled'));
         const syncId = task.syncId || task.id;
-        return {
+        const nextState = {
           tasks: state.tasks.filter((item) => item.id !== id),
           activeTaskId: state.activeTaskId === id ? null : state.activeTaskId,
           history: appendHistory(state.history, finalizedTask),
           closedSyncIds: {
             ...state.closedSyncIds,
             [syncId]: 'cancelled'
-          }
+          } as Record<string, 'done' | 'cancelled'>
         };
+        if (state.isLoggedIn && state.user?.id) {
+          queueCloudSync();
+        }
+        return nextState;
       }),
 
       addTimeToTask: (id, minutes) => {
@@ -542,6 +657,10 @@ export const useStore = create<AppState>()(
         }));
         const updatedTask = get().tasks.find((task) => task.id === id);
         if (updatedTask) {
+          const stateAfterUpdate = get();
+          if (stateAfterUpdate.isLoggedIn && stateAfterUpdate.user?.id) {
+            queueCloudSync();
+          }
           void pushTaskFromWeb(buildBridgePayload(updatedTask));
         }
       },
@@ -549,15 +668,52 @@ export const useStore = create<AppState>()(
       clearTodayHistory: () =>
         set((state) => {
           const today = new Date().toISOString().split('T')[0];
-          return {
+          const nextState = {
             history: state.history.filter((record) => record.date !== today)
           };
+          if (state.isLoggedIn && state.user?.id) {
+            queueCloudSync();
+          }
+          return nextState;
         }),
 
-      setLoggedIn: (isLoggedIn, user = null) => set({
-        isLoggedIn,
-        user: isLoggedIn ? (user || { name: 'Alex', email: 'alex@example.com', avatar: 'AL' }) : null
-      }),
+      setLoggedIn: (isLoggedIn, user = null, options) => {
+        const shouldClearData = !isLoggedIn && Boolean(options?.clearDataOnLogout);
+        set((state) => ({
+          isLoggedIn,
+          user: isLoggedIn ? user : null,
+          tasks: shouldClearData ? [] : state.tasks,
+          history: shouldClearData ? [] : state.history,
+          activeTaskId: shouldClearData ? null : state.activeTaskId,
+          closedSyncIds: shouldClearData ? {} : state.closedSyncIds,
+          lastTaskSyncAtById: shouldClearData ? {} : state.lastTaskSyncAtById,
+          lastFocusSyncAt: shouldClearData ? 0 : state.lastFocusSyncAt,
+          lastBridgeSyncAt: shouldClearData ? 0 : state.lastBridgeSyncAt
+        }));
+      },
+
+      hydrateCloudData: async (userId) => {
+        const snapshot = await loadCloudSnapshot(userId);
+        const current = get();
+        const mergedHistory = mergeHistoryRecords(current.history, snapshot.history);
+
+        set((state) => ({
+          ...state,
+          // Hard rule: local active tasks remain local; cloud stores history only.
+          tasks: state.tasks,
+          history: mergedHistory,
+          activeTaskId: state.activeTaskId,
+          closedSyncIds: {}
+        }));
+
+        queueCloudSync({ historyOnly: true });
+      },
+
+      syncCloudData: async (options) => {
+        const state = get();
+        if (!state.isLoggedIn || !state.user?.id) return;
+        await saveCloudSnapshot(state.user.id, state.tasks, state.history, options);
+      },
 
       toggleIsland: () =>
         set((state) => {
@@ -569,7 +725,8 @@ export const useStore = create<AppState>()(
       setIslandVisible: (visible) => set({ isIslandVisible: visible })
     }),
     {
-      name: 'clawdmate-storage-prod'
+      name: 'clawdmate-storage-prod',
+      storage: getGuestStorage()
     }
   )
 );
