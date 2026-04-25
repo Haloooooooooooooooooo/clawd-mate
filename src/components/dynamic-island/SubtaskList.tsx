@@ -22,13 +22,7 @@ export function SubtaskList({ subTasks, onComplete, onSkip }: SubtaskListProps) 
             <div className="flex items-center gap-2">
               <span
                 className={`h-2.5 w-2.5 rounded-full ${
-                  isDone
-                    ? 'bg-emerald-400'
-                    : isCurrent
-                      ? 'bg-blue-400'
-                      : isSkipped
-                        ? 'bg-white/25'
-                        : 'bg-white/35'
+                  isDone ? 'bg-emerald-400' : isCurrent ? 'bg-blue-400' : isSkipped ? 'bg-white/25' : 'bg-white/35'
                 }`}
               />
               <span

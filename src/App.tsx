@@ -23,6 +23,27 @@ function mapBridgeStatus(status?: string): 'active' | 'paused' | 'completed' | '
   return 'active';
 }
 
+function normalizeBridgeSubtasks(
+  subtasks: Array<{ title: string; status: 'pending' | 'active' | 'completed' | 'skipped' }>,
+  taskStatus: 'active' | 'paused' | 'completed' | 'cancelled'
+): Array<{ title: string; status: 'pending' | 'active' | 'completed' | 'skipped' }> {
+  if (subtasks.length === 0) return subtasks;
+
+  const hasActive = subtasks.some((subtask) => subtask.status === 'active');
+  if (hasActive || (taskStatus !== 'active' && taskStatus !== 'paused')) {
+    return subtasks;
+  }
+
+  const firstPendingIndex = subtasks.findIndex((subtask) => subtask.status === 'pending');
+  if (firstPendingIndex === -1) {
+    return subtasks;
+  }
+
+  return subtasks.map((subtask, index) =>
+    index === firstPendingIndex ? { ...subtask, status: 'active' as const } : subtask
+  );
+}
+
 const FRAME_BASE_HEIGHT = 220;
 const FRAME_EXPANDED_HEIGHT = FRAME_BASE_HEIGHT * 3;
 const FRAME_COMPACT_HEIGHT = 420;
@@ -66,7 +87,7 @@ function App() {
         const elapsedSeconds = Number.isFinite(item.elapsed_seconds)
           ? Math.max(0, Number(item.elapsed_seconds))
           : 0;
-        const subtaskPayloads = Array.isArray(item.subtasks)
+        const rawSubtaskPayloads = Array.isArray(item.subtasks)
           ? item.subtasks
               .map((subtask, index) => {
                 if (typeof subtask === 'string') {
@@ -91,6 +112,7 @@ function App() {
                   Boolean(subtask)
               )
           : [];
+        const subtaskPayloads = normalizeBridgeSubtasks(rawSubtaskPayloads, status);
 
         if (!title || !Number.isFinite(plannedDuration) || plannedDuration <= 0) {
           return;
