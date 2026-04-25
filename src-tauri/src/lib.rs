@@ -10,11 +10,32 @@ use std::thread;
 use tauri::{AppHandle, Manager, PhysicalPosition};
 
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+enum SubtaskSyncPayload {
+    Title(String),
+    Detail {
+        title: String,
+        #[serde(default)]
+        status: Option<String>,
+    },
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 struct TaskSyncPayload {
+    #[serde(default)]
+    sync_id: Option<String>,
     title: String,
     duration_minutes: u32,
     mode: String,
-    subtasks: Vec<String>,
+    subtasks: Vec<SubtaskSyncPayload>,
+    #[serde(default)]
+    status: Option<String>,
+    #[serde(default)]
+    elapsed_seconds: Option<u32>,
+    #[serde(default)]
+    focused: Option<bool>,
+    #[serde(default)]
+    updated_at_ms: Option<u64>,
 }
 
 #[derive(Deserialize)]

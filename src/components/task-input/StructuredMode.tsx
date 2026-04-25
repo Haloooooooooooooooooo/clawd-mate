@@ -43,6 +43,7 @@ export function StructuredMode({
 
   const handleStart = () => {
     if (!title.trim()) return;
+    const syncId = uuidv4();
 
     const validSubTasks = subTaskInputs
       .filter((text) => text.trim())
@@ -58,6 +59,7 @@ export function StructuredMode({
 
     const task: Task = {
       id: uuidv4(),
+      syncId,
       title: title.trim(),
       mode: 'structured',
       status: activateOnStart ? 'active' : 'paused',
@@ -71,10 +73,17 @@ export function StructuredMode({
 
     addTask(task);
     void pushTaskFromIsland({
+      sync_id: syncId,
       title: task.title,
       duration_minutes: task.plannedDuration,
       mode: task.mode,
-      subtasks: validSubTasks.map((subTask) => subTask.title)
+      subtasks: validSubTasks.map((subTask) => ({
+        title: subTask.title,
+        status: subTask.status
+      })),
+      status: activateOnStart ? 'active' : 'paused',
+      elapsed_seconds: task.actualDuration,
+      updated_at_ms: Date.now()
     });
     if (switchToTaskOnStart) {
       setActiveTask(task.id);

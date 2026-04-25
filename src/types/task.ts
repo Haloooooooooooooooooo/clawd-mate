@@ -13,6 +13,7 @@ export interface SubTask {
 
 export interface Task {
   id: string;
+  syncId?: string;
   title: string;
   mode: TaskMode;
   status: TaskStatus;

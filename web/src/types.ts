@@ -14,6 +14,7 @@ export interface Subtask {
 
 export interface Task {
   id: string;
+  syncId?: string;
   title: string;
   totalDuration: number; // in seconds
   remainingTime: number; // in seconds

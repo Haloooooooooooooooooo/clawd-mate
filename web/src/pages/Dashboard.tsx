@@ -9,50 +9,75 @@ import { Plus, Play, Pause, CheckCircle2, X, ChevronRight, SkipForward, Menu } f
 import { cn, formatTime } from '../lib/utils';
 import { motion } from 'motion/react';
 
+type DashboardSubtask = {
+  id: string;
+  title: string;
+  status: 'pending' | 'done' | 'skipped';
+};
+
+function normalizeSubtasks(input: unknown): DashboardSubtask[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((item, index) => {
+      if (typeof item === 'string') {
+        const title = item.trim();
+        if (!title) return null;
+        return {
+          id: `legacy-subtask-${index}`,
+          title,
+          status: 'pending' as const
+        };
+      }
+      if (item && typeof item === 'object') {
+        const maybe = item as { id?: unknown; title?: unknown; status?: unknown };
+        const title = typeof maybe.title === 'string' ? maybe.title.trim() : '';
+        if (!title) return null;
+        const status =
+          maybe.status === 'done' || maybe.status === 'skipped' || maybe.status === 'pending'
+            ? maybe.status
+            : 'pending';
+        const id = typeof maybe.id === 'string' && maybe.id.trim().length > 0 ? maybe.id : `legacy-subtask-${index}`;
+        return { id, title, status };
+      }
+      return null;
+    })
+    .filter((item): item is DashboardSubtask => Boolean(item));
+}
+
 export default function Dashboard() {
-  const { tasks, addTask, updateRemainingTime, completeTask, cancelTask, toggleSubtask, skipSubtask, history, addTimeToTask } = useStore();
+  const { tasks, activeTaskId, lastBridgeSyncAt, addTask, updateRemainingTime, completeTask, cancelTask, toggleSubtask, skipSubtask, history, addTimeToTask, setActiveTask } = useStore();
   const [taskTitle, setTaskTitle] = useState('');
   const [duration, setDuration] = useState(30);
   const [mode, setMode] = useState<'minimal' | 'structured'>('minimal');
   const [subtaskInput, setSubtaskInput] = useState('');
   const [subtasks, setSubtasks] = useState<string[]>([]);
-  const [activeTaskIndex, setActiveTaskIndex] = useState(0);
   const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
   const parallelTasksRef = useRef<HTMLDivElement>(null);
   const historyListRef = useRef<HTMLDivElement>(null);
 
   const activeTasks = tasks.filter(t => t.status === 'running' || t.status === 'paused');
-  const currentTask = activeTasks[activeTaskIndex];
+  const focusedTaskIndex = activeTasks.findIndex((task) => task.id === activeTaskId);
+  const currentTask = focusedTaskIndex >= 0 ? activeTasks[focusedTaskIndex] : activeTasks[0];
+  const currentTaskSubtasks = normalizeSubtasks(currentTask?.subtasks);
+  const currentTaskId = currentTask?.id ?? null;
   const isFinished = currentTask && currentTask.remainingTime <= 0;
-
-  // Keep selected index valid after task completion/cancellation.
-  useEffect(() => {
-    if (activeTasks.length === 0) {
-      if (activeTaskIndex !== 0) {
-        setActiveTaskIndex(0);
-      }
-      return;
-    }
-
-    if (activeTaskIndex >= activeTasks.length) {
-      setActiveTaskIndex(activeTasks.length - 1);
-    }
-  }, [activeTaskIndex, activeTasks.length]);
 
   // Auto-scroll to finished task
   useEffect(() => {
-    const finishedTask = activeTasks.find((t, i) => t.remainingTime <= 0 && i !== activeTaskIndex);
+    const finishedTask = activeTasks.find((task) => task.remainingTime <= 0 && task.id !== currentTaskId);
     if (finishedTask) {
       const element = document.getElementById(`task-preview-${finishedTask.id}`);
       if (element) {
         element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
     }
-  }, [activeTasks, activeTaskIndex]);
+  }, [activeTasks, currentTaskId]);
 
   // Timer loop
   useEffect(() => {
     const interval = setInterval(() => {
+      const bridgeIsFresh = Date.now() - lastBridgeSyncAt < 2500;
+      if (bridgeIsFresh) return;
       activeTasks.forEach(task => {
         if (task.status === 'running') {
           updateRemainingTime(task.id, 1);
@@ -60,7 +85,7 @@ export default function Dashboard() {
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [activeTasks, updateRemainingTime]);
+  }, [activeTasks, lastBridgeSyncAt, updateRemainingTime]);
 
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -291,10 +316,15 @@ export default function Dashboard() {
                         {activeTasks.map((_, i) => (
                           <button 
                             key={i}
-                            onClick={() => setActiveTaskIndex(i)}
+                            onClick={() => {
+                              const nextTask = activeTasks[i];
+                              if (nextTask) {
+                                setActiveTask(nextTask.id);
+                              }
+                            }}
                             className={cn(
                               "w-6 h-6 rounded-md text-[10px] font-bold transition-all border",
-                              activeTaskIndex === i 
+                              activeTasks[i]?.id === currentTaskId
                                 ? "bg-primary text-white border-primary" 
                                 : "bg-white text-muted-text border-border-main hover:border-primary/50"
                             )}
@@ -315,15 +345,15 @@ export default function Dashboard() {
                       {currentTask.title}
                     </h3>
                     <p className="text-muted-text text-sm italic">
-                      {currentTask.subtasks.find(s => s.status === 'pending')?.title || "正在稳步推进中..."}
+                      {currentTaskSubtasks.find(s => s.status === 'pending')?.title || "正在稳步推进中..."}
                     </p>
                   </div>
 
                   {/* Subtasks Box */}
-                  {currentTask.subtasks.length > 0 && (
+                  {currentTaskSubtasks.length > 0 && (
                     <div className="bg-[#F9F9F8] rounded-[16px] p-2 space-y-1 border border-border-main/50 max-h-48 overflow-y-auto">
-                      {currentTask.subtasks.map((st, sIdx) => {
-                        const isActive = sIdx === currentTask.subtasks.findIndex(s => s.status === 'pending');
+                      {currentTaskSubtasks.map((st, sIdx) => {
+                        const isActive = sIdx === currentTaskSubtasks.findIndex(s => s.status === 'pending');
                         return (
                           <div key={st.id} className={cn(
                             "flex items-center justify-between p-3 rounded-[4px] transition-all",
@@ -462,8 +492,8 @@ export default function Dashboard() {
                     <div className="pt-6 border-t border-stone-100 space-y-3">
                       <h4 className="text-[10px] font-bold text-stone-400 uppercase tracking-widest pl-1">其他并行任务</h4>
                       <div className="space-y-2 max-h-64 overflow-y-auto pr-1 scrollbar-hide snap-y" ref={parallelTasksRef}>
-                        {activeTasks.map((task, idx) => {
-                          if (idx === activeTaskIndex) return null;
+                        {activeTasks.map((task) => {
+                          if (task.id === currentTaskId) return null;
                           const isTaskFinished = task.remainingTime <= 0;
                           return (
                             <motion.div 
@@ -477,7 +507,9 @@ export default function Dashboard() {
                               )}
                             >
                               <button 
-                                onClick={() => setActiveTaskIndex(idx)}
+                                onClick={() => {
+                                  setActiveTask(task.id);
+                                }}
                                 className={cn(
                                   "w-full flex items-center gap-4 p-4 border rounded-[4px] transition-all text-left overflow-hidden",
                                   isTaskFinished 
@@ -627,6 +659,7 @@ export default function Dashboard() {
             {todayHistory.map((h) => {
               const timeSpent = h.totalDuration - h.remainingTime;
               const isHighlighted = highlightTaskId === h.id;
+              const historySubtasks = normalizeSubtasks(h.subtasks);
               
               return (
                 <motion.div 
@@ -676,9 +709,9 @@ export default function Dashboard() {
                     </div>
                   </div>
                   
-                  {h.subtasks.length > 0 && (
+                  {historySubtasks.length > 0 && (
                     <ul className="pl-4 space-y-1.5 border-l-2 border-stone-100 ml-5">
-                      {h.subtasks.slice(0, 3).map((st, idx) => (
+                      {historySubtasks.slice(0, 3).map((st, idx) => (
                         <li key={st.id} className="flex items-center gap-2 text-[11px] font-medium text-stone-500">
                           <span className="text-stone-300 font-mono text-[10px]">{idx + 1}.</span>
                           <span className={cn(
@@ -689,8 +722,8 @@ export default function Dashboard() {
                           </span>
                         </li>
                       ))}
-                      {h.subtasks.length > 3 && (
-                        <li className="text-[10px] text-stone-300 italic pl-5">还有 {h.subtasks.length - 3} 个子任务...</li>
+                      {historySubtasks.length > 3 && (
+                        <li className="text-[10px] text-stone-300 italic pl-5">还有 {historySubtasks.length - 3} 个子任务...</li>
                       )}
                     </ul>
                   )}

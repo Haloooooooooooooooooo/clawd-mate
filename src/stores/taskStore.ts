@@ -124,6 +124,65 @@ export const useTaskStore = create<TaskStore>()(
             subTasks.length > 0 &&
             subTasks.every((st) => st.status === 'completed' || st.status === 'skipped');
           if (allResolved) {
+            const allSkipped = subTasks.every((st) => st.status === 'skipped');
+            shouldClearActive = state.activeTaskId === task.id;
+            return {
+              ...task,
+              subTasks,
+              status: allSkipped ? ('cancelled' as const) : ('completed' as const),
+              completedAt: new Date()
+            };
+          }
+
+          const nextIndex = currentIndex + 1;
+          if (nextIndex < subTasks.length && subTasks[nextIndex].status === 'pending') {
+            subTasks[nextIndex] = {
+              ...subTasks[nextIndex],
+              status: 'active' as const,
+              startedAt: new Date()
+            };
+          }
+
+          return { ...task, subTasks };
+        });
+
+        return {
+          tasks,
+          activeTaskId: shouldClearActive ? null : state.activeTaskId
+        };
+      }),
+
+      skipSubTask: (taskId, subTaskId) => set((state) => {
+        let shouldClearActive = false;
+
+        const tasks = state.tasks.map((task) => {
+          if (task.id !== taskId) return task;
+
+          const subTasks = [...task.subTasks];
+          const currentIndex = subTasks.findIndex((st) => st.id === subTaskId);
+          if (currentIndex === -1) return task;
+
+          subTasks[currentIndex] = {
+            ...subTasks[currentIndex],
+            status: 'skipped' as const,
+            completedAt: new Date()
+          };
+
+          const allSkipped = subTasks.length > 0 && subTasks.every((st) => st.status === 'skipped');
+          if (allSkipped) {
+            shouldClearActive = state.activeTaskId === task.id;
+            return {
+              ...task,
+              subTasks,
+              status: 'cancelled' as const,
+              completedAt: new Date()
+            };
+          }
+
+          const allResolved =
+            subTasks.length > 0 &&
+            subTasks.every((st) => st.status === 'completed' || st.status === 'skipped');
+          if (allResolved) {
             shouldClearActive = state.activeTaskId === task.id;
             return {
               ...task,
@@ -149,34 +208,7 @@ export const useTaskStore = create<TaskStore>()(
           tasks,
           activeTaskId: shouldClearActive ? null : state.activeTaskId
         };
-      }),
-
-      skipSubTask: (taskId, subTaskId) => set((state) => ({
-        tasks: state.tasks.map((task) => {
-          if (task.id !== taskId) return task;
-
-          const subTasks = [...task.subTasks];
-          const currentIndex = subTasks.findIndex((st) => st.id === subTaskId);
-          if (currentIndex === -1) return task;
-
-          subTasks[currentIndex] = {
-            ...subTasks[currentIndex],
-            status: 'skipped' as const,
-            completedAt: new Date()
-          };
-
-          const nextIndex = currentIndex + 1;
-          if (nextIndex < subTasks.length && subTasks[nextIndex].status === 'pending') {
-            subTasks[nextIndex] = {
-              ...subTasks[nextIndex],
-              status: 'active' as const,
-              startedAt: new Date()
-            };
-          }
-
-          return { ...task, subTasks };
-        })
-      }))
+      })
     }),
     {
       name: 'clawdmate-tasks',

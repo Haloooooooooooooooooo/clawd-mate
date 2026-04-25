@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
 import { DynamicIsland } from './components/dynamic-island/DynamicIsland';
@@ -6,15 +6,36 @@ import { TaskInput } from './components/task-input/TaskInput';
 import { useTaskStore } from './stores/taskStore';
 import { pullTasksForIsland } from './lib/islandBridge';
 
+function mapBridgeSubtaskStatus(
+  status: string | undefined,
+  fallback: 'pending' | 'active' = 'pending'
+): 'pending' | 'active' | 'completed' | 'skipped' {
+  if (status === 'completed' || status === 'done') return 'completed';
+  if (status === 'skipped') return 'skipped';
+  if (status === 'active') return 'active';
+  return fallback;
+}
+
+function mapBridgeStatus(status?: string): 'active' | 'paused' | 'completed' | 'cancelled' {
+  if (status === 'paused' || status === 'completed' || status === 'cancelled') {
+    return status;
+  }
+  return 'active';
+}
+
 const FRAME_BASE_HEIGHT = 220;
-const FRAME_EXPANDED_HEIGHT = FRAME_BASE_HEIGHT * 3; // 660
+const FRAME_EXPANDED_HEIGHT = FRAME_BASE_HEIGHT * 3;
 const FRAME_COMPACT_HEIGHT = 420;
 
 function App() {
   const [showInput, setShowInput] = useState(false);
   const [expandOnTaskStartKey, setExpandOnTaskStartKey] = useState(0);
+  const lastTaskSyncAtRef = useRef<Record<string, number>>({});
+  const lastFocusSyncAtRef = useRef(0);
   const activeTaskId = useTaskStore((state) => state.activeTaskId);
   const addTask = useTaskStore((state) => state.addTask);
+  const updateTask = useTaskStore((state) => state.updateTask);
+  const removeTask = useTaskStore((state) => state.removeTask);
   const setActiveTask = useTaskStore((state) => state.setActiveTask);
   const hasActiveTask = useTaskStore((state) =>
     state.tasks.some((task) => task.id === activeTaskId && task.status !== 'completed')
@@ -30,45 +51,150 @@ function App() {
       incoming.forEach((item) => {
         const title = item.title?.trim();
         const plannedDuration = Number(item.duration_minutes);
-        const subtaskTitles = Array.isArray(item.subtasks)
-          ? item.subtasks.filter((subtask) => typeof subtask === 'string' && subtask.trim().length > 0)
+        const syncId = item.sync_id?.trim();
+        const incomingUpdatedAt = Number.isFinite(item.updated_at_ms)
+          ? Number(item.updated_at_ms)
+          : Date.now();
+        if (syncId) {
+          const lastTaskSyncAt = lastTaskSyncAtRef.current[syncId] || 0;
+          if (incomingUpdatedAt < lastTaskSyncAt) {
+            return;
+          }
+        }
+        const focused = item.focused === true;
+        const status = mapBridgeStatus(item.status);
+        const elapsedSeconds = Number.isFinite(item.elapsed_seconds)
+          ? Math.max(0, Number(item.elapsed_seconds))
+          : 0;
+        const subtaskPayloads = Array.isArray(item.subtasks)
+          ? item.subtasks
+              .map((subtask, index) => {
+                if (typeof subtask === 'string') {
+                  const value = subtask.trim();
+                  return value ? { title: value, status: index === 0 ? 'active' : 'pending' } : null;
+                }
+                if (subtask && typeof subtask === 'object' && typeof subtask.title === 'string') {
+                  const value = subtask.title.trim();
+                  if (!value) return null;
+                  return {
+                    title: value,
+                    status: mapBridgeSubtaskStatus(
+                      typeof subtask.status === 'string' ? subtask.status : undefined,
+                      index === 0 ? 'active' : 'pending'
+                    )
+                  };
+                }
+                return null;
+              })
+              .filter(
+                (subtask): subtask is { title: string; status: 'pending' | 'active' | 'completed' | 'skipped' } =>
+                  Boolean(subtask)
+              )
           : [];
 
         if (!title || !Number.isFinite(plannedDuration) || plannedDuration <= 0) {
           return;
         }
 
-        const taskId = uuidv4();
         const storeState = useTaskStore.getState();
+        const existingTask = syncId
+          ? storeState.tasks.find((task) => task.syncId === syncId)
+          : undefined;
+
+        if (existingTask) {
+          if (status === 'cancelled') {
+            removeTask(existingTask.id);
+            if (syncId) {
+              lastTaskSyncAtRef.current[syncId] = incomingUpdatedAt;
+            }
+            return;
+          }
+
+          updateTask(existingTask.id, {
+            title,
+            plannedDuration,
+            actualDuration: elapsedSeconds,
+            status,
+            completedAt: status === 'completed' ? new Date() : null,
+            subTasks: subtaskPayloads.map((subtask, subtaskIndex) => ({
+              id: existingTask.subTasks[subtaskIndex]?.id || uuidv4(),
+              title: subtask.title,
+              order: subtaskIndex,
+              status: subtask.status,
+              duration: existingTask.subTasks[subtaskIndex]?.duration ?? 0,
+              startedAt:
+                subtask.status === 'active'
+                  ? (existingTask.subTasks[subtaskIndex]?.startedAt ?? new Date())
+                  : null,
+              completedAt:
+                subtask.status === 'completed' || subtask.status === 'skipped'
+                  ? (existingTask.subTasks[subtaskIndex]?.completedAt ?? new Date())
+                  : null
+            }))
+          });
+
+          const hasCurrentActive = storeState.tasks.some(
+            (task) => task.id === storeState.activeTaskId && task.status === 'active'
+          );
+          if (status === 'active' && !hasCurrentActive) {
+            setActiveTask(existingTask.id);
+          }
+          if (focused && incomingUpdatedAt >= lastFocusSyncAtRef.current) {
+            lastFocusSyncAtRef.current = incomingUpdatedAt;
+            setActiveTask(existingTask.id);
+          }
+          if (syncId) {
+            lastTaskSyncAtRef.current[syncId] = incomingUpdatedAt;
+          }
+          return;
+        }
+
+        if (status === 'cancelled' || status === 'completed') {
+          if (syncId) {
+            lastTaskSyncAtRef.current[syncId] = incomingUpdatedAt;
+          }
+          return;
+        }
+
+        const taskId = uuidv4();
         const hasCurrentActive = storeState.tasks.some(
           (task) => task.id === storeState.activeTaskId && task.status === 'active'
         );
-        const shouldSetAsMain = !hasCurrentActive;
+        const canApplyFocus = focused && incomingUpdatedAt >= lastFocusSyncAtRef.current;
+        const shouldSetAsMain = canApplyFocus || (status === 'active' && !hasCurrentActive);
 
         addTask({
           id: taskId,
+          syncId: syncId || `web-${taskId}`,
           title,
-          mode: subtaskTitles.length > 0 ? 'structured' : 'simple',
-          status: 'active',
+          mode: subtaskPayloads.length > 0 ? 'structured' : 'simple',
+          status,
           plannedDuration,
-          actualDuration: 0,
-          startedAt: new Date(),
+          actualDuration: elapsedSeconds,
+          startedAt: status === 'active' ? new Date() : null,
           completedAt: null,
-          subTasks: subtaskTitles.map((subtaskTitle, subtaskIndex) => ({
+          subTasks: subtaskPayloads.map((subtask, subtaskIndex) => ({
             id: uuidv4(),
-            title: subtaskTitle,
+            title: subtask.title,
             order: subtaskIndex,
-            status: subtaskIndex === 0 ? 'active' : 'pending',
+            status: subtask.status,
             duration: 0,
-            startedAt: subtaskIndex === 0 ? new Date() : null,
-            completedAt: null
+            startedAt: subtask.status === 'active' ? new Date() : null,
+            completedAt:
+              subtask.status === 'completed' || subtask.status === 'skipped' ? new Date() : null
           })),
           createdAt: new Date()
         });
 
         if (shouldSetAsMain) {
+          if (canApplyFocus) {
+            lastFocusSyncAtRef.current = incomingUpdatedAt;
+          }
           setActiveTask(taskId);
           setExpandOnTaskStartKey((value) => value + 1);
+        }
+        if (syncId) {
+          lastTaskSyncAtRef.current[syncId] = incomingUpdatedAt;
         }
       });
     };
@@ -82,7 +208,7 @@ function App() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [activeTaskId, addTask, setActiveTask]);
+  }, [activeTaskId, addTask, removeTask, setActiveTask, updateTask]);
 
   const handleTaskStart = () => {
     setShowInput(false);

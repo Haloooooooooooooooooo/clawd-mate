@@ -3,6 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTaskStore } from '../../stores/taskStore';
 import { useTimer } from '../../hooks/useTimer';
 import { useReminder } from '../../hooks/useReminder';
+import { pushTaskFromIsland } from '../../lib/islandBridge';
+import type { Task } from '../../types/task';
 import { CollapsedView } from './CollapsedView';
 import { ExpandedView } from './ExpandedView';
 
@@ -34,9 +36,60 @@ export function DynamicIsland({
   const removeTask = useTaskStore((state) => state.removeTask);
   const setActiveTask = useTaskStore((state) => state.setActiveTask);
 
+  const pushTaskSync = (
+    task: Task,
+    overrides?: Partial<{
+      plannedDuration: number;
+      actualDuration: number;
+      status: 'active' | 'paused' | 'completed' | 'cancelled';
+      focused: boolean;
+    }>
+  ) => {
+    const nextStatus =
+      overrides?.status ||
+      (task.status === 'paused' || task.status === 'completed' || task.status === 'cancelled'
+        ? task.status
+        : 'active');
+    const nextDuration = overrides?.plannedDuration ?? task.plannedDuration;
+    const nextElapsed = overrides?.actualDuration ?? task.actualDuration;
+    const hasFocusedOverride = typeof overrides?.focused === 'boolean';
+
+    const payload = {
+      sync_id: task.syncId || task.id,
+      title: task.title,
+      duration_minutes: nextDuration,
+      mode: task.mode,
+      subtasks: task.subTasks.map((subTask) => ({
+        title: subTask.title,
+        status: subTask.status
+      })),
+      status: nextStatus,
+      elapsed_seconds: nextElapsed,
+      updated_at_ms: Date.now()
+    } as const;
+
+    void pushTaskFromIsland(
+      hasFocusedOverride
+        ? { ...payload, focused: overrides?.focused }
+        : payload
+    );
+  };
+
+  const pushCurrentTaskSnapshot = (taskId: string) => {
+    const latestTask = useTaskStore.getState().tasks.find((item) => item.id === taskId);
+    if (!latestTask) return;
+    pushTaskSync(latestTask, {
+      status:
+        latestTask.status === 'paused' || latestTask.status === 'completed' || latestTask.status === 'cancelled'
+          ? latestTask.status
+          : 'active'
+    });
+  };
+
   const timer = useTimer({
     plannedDuration: activeTask?.plannedDuration || 25,
     initialElapsed: activeTask?.actualDuration || 0,
+    syncKey: activeTaskId,
     onTick: (elapsed) => {
       if (activeTaskId) {
         updateTask(activeTaskId, { actualDuration: elapsed });
@@ -78,6 +131,19 @@ export function DynamicIsland({
 
       runningParallelTasks.forEach((task) => {
         store.updateTask(task.id, { actualDuration: task.actualDuration + 1 });
+      });
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  // Keep Web timer aligned with island timer by pushing running task snapshots continuously.
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      const store = useTaskStore.getState();
+      const runningTasks = store.tasks.filter((task) => task.status === 'active');
+      runningTasks.forEach((task) => {
+        pushTaskSync(task, { status: 'active' });
       });
     }, 1000);
 
@@ -132,7 +198,7 @@ export function DynamicIsland({
   }, [expandOnTaskStartKey, activeTaskId]);
 
   const handleExtend = (minutes: number) => {
-    if (!activeTaskId) return;
+    if (!activeTaskId || !activeTask) return;
     const currentPlannedMinutes = activeTask?.plannedDuration || 25;
     const currentPlannedSeconds = currentPlannedMinutes * 60;
     const persistedElapsed = activeTask?.actualDuration || 0;
@@ -152,22 +218,41 @@ export function DynamicIsland({
       timer.start();
       updateTask(activeTaskId, { status: 'active' });
     }
+    pushTaskSync(activeTask, {
+      plannedDuration: currentPlannedMinutes + minutes,
+      actualDuration: nextElapsedBaseline,
+      status: 'active'
+    });
     reminder.resetType('timeUp');
   };
 
   const handlePause = () => {
     timer.pause();
     if (activeTaskId) updateTask(activeTaskId, { status: 'paused' });
+    if (activeTask) {
+      pushTaskSync(activeTask, {
+        actualDuration: Math.max(activeTask.actualDuration, timer.elapsedSeconds),
+        status: 'paused',
+        focused: true
+      });
+    }
   };
 
   const handleResume = () => {
     timer.start();
     if (activeTaskId) updateTask(activeTaskId, { status: 'active' });
+    if (activeTask) {
+      pushTaskSync(activeTask, { status: 'active', focused: true });
+    }
   };
 
   const handleComplete = () => {
     timer.pause();
-    if (!activeTaskId) return;
+    if (!activeTaskId || !activeTask) return;
+    pushTaskSync(activeTask, {
+      actualDuration: Math.max(activeTask.actualDuration, timer.elapsedSeconds),
+      status: 'completed'
+    });
     completeTask(activeTaskId);
 
     // 切换到下一个并行任务，而不是收起
@@ -183,10 +268,24 @@ export function DynamicIsland({
   };
 
   const handleSwitchTask = (taskId: string) => {
+    const previousTask = activeTaskId ? tasks.find((task) => task.id === activeTaskId) : undefined;
+    const targetTask = tasks.find((task) => task.id === taskId);
     timer.pause();
-    if (activeTaskId) updateTask(activeTaskId, { status: 'paused' });
     setActiveTask(taskId);
     updateTask(taskId, { status: 'active' });
+    if (previousTask) {
+      pushTaskSync(previousTask, {
+        actualDuration: Math.max(previousTask.actualDuration, timer.elapsedSeconds),
+        status:
+          previousTask.status === 'paused' || previousTask.status === 'completed' || previousTask.status === 'cancelled'
+            ? previousTask.status
+            : 'active',
+        focused: false
+      });
+    }
+    if (targetTask) {
+      pushTaskSync(targetTask, { status: 'active', focused: true });
+    }
   };
 
   const handlePauseTask = (taskId: string) => {
@@ -203,12 +302,17 @@ export function DynamicIsland({
     }
 
     updateTask(taskId, { status: targetTask.status === 'paused' ? 'active' : 'paused' });
+    pushTaskSync(targetTask, { status: targetTask.status === 'paused' ? 'active' : 'paused' });
   };
 
   const handleCompleteTask = (taskId: string) => {
     if (taskId === activeTaskId) {
       handleComplete();
       return;
+    }
+    const targetTask = tasks.find((task) => task.id === taskId);
+    if (targetTask) {
+      pushTaskSync(targetTask, { status: 'completed' });
     }
     completeTask(taskId);
   };
@@ -217,6 +321,10 @@ export function DynamicIsland({
     if (taskId === activeTaskId) {
       handleCancel();
       return;
+    }
+    const targetTask = tasks.find((task) => task.id === taskId);
+    if (targetTask) {
+      pushTaskSync(targetTask, { status: 'cancelled' });
     }
     updateTask(taskId, { status: 'cancelled' });
     removeTask(taskId);
@@ -242,11 +350,20 @@ export function DynamicIsland({
       actualDuration: nextElapsedBaseline,
       status: 'active'
     });
+    pushTaskSync(targetTask, {
+      plannedDuration: targetTask.plannedDuration + minutes,
+      actualDuration: nextElapsedBaseline,
+      status: 'active'
+    });
   };
 
   const handleCancel = () => {
-    if (!activeTaskId) return;
+    if (!activeTaskId || !activeTask) return;
     timer.pause();
+    pushTaskSync(activeTask, {
+      actualDuration: Math.max(activeTask.actualDuration, timer.elapsedSeconds),
+      status: 'cancelled'
+    });
     updateTask(activeTaskId, { status: 'cancelled' });
     removeTask(activeTaskId);
     setActiveTask(null);
@@ -272,10 +389,12 @@ export function DynamicIsland({
 
   const handleCompleteSubTask = (taskId: string, subTaskId: string) => {
     completeSubTask(taskId, subTaskId);
+    pushCurrentTaskSnapshot(taskId);
   };
 
   const handleSkipSubTask = (taskId: string, subTaskId: string) => {
     skipSubTask(taskId, subTaskId);
+    pushCurrentTaskSnapshot(taskId);
   };
 
   if (!activeTask) {

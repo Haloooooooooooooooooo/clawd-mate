@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface UseTimerReturn {
   elapsedSeconds: number;
@@ -13,30 +13,38 @@ interface UseTimerReturn {
 
 interface UseTimerOptions {
   plannedDuration: number; // minutes
-  initialElapsed?: number; // seconds, 用于恢复计时
+  initialElapsed?: number; // seconds
+  syncKey?: string | null; // task id or equivalent key for forced resync when switching task
   onTick?: (elapsedSeconds: number) => void;
 }
 
 export function useTimer(options: UseTimerOptions): UseTimerReturn {
-  const { plannedDuration, initialElapsed = 0, onTick } = options;
+  const { plannedDuration, initialElapsed = 0, syncKey = null, onTick } = options;
 
   const [elapsedSeconds, setElapsedSeconds] = useState(initialElapsed);
   const [isRunning, setIsRunning] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef = useRef(initialElapsed);
   const lastInitialElapsedRef = useRef(initialElapsed);
+  const lastSyncKeyRef = useRef<string | null>(syncKey);
 
-  // 只在 initialElapsed 发生显著变化时同步（切换任务时）
-  // 避免每次 onTick 更新时重置
   useEffect(() => {
-    // 只有当 initialElapsed 与当前值差异大于 1 秒时才同步
-    // 这表示切换了任务，而不是正常的计时更新
+    // Task switch: always align elapsed value with the new task immediately.
+    if (syncKey !== lastSyncKeyRef.current) {
+      elapsedRef.current = initialElapsed;
+      setElapsedSeconds(initialElapsed);
+      lastInitialElapsedRef.current = initialElapsed;
+      lastSyncKeyRef.current = syncKey;
+      return;
+    }
+
+    // Non-switch update: avoid resetting every second from onTick write-backs.
     if (Math.abs(initialElapsed - lastInitialElapsedRef.current) > 1) {
       elapsedRef.current = initialElapsed;
       setElapsedSeconds(initialElapsed);
       lastInitialElapsedRef.current = initialElapsed;
     }
-  }, [initialElapsed]);
+  }, [initialElapsed, syncKey]);
 
   const plannedSeconds = plannedDuration * 60;
   const remainingSeconds = Math.max(0, plannedSeconds - elapsedSeconds);
@@ -69,7 +77,6 @@ export function useTimer(options: UseTimerOptions): UseTimerReturn {
     lastInitialElapsedRef.current = 0;
   }, [pause]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (intervalRef.current) {

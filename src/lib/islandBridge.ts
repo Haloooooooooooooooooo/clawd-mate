@@ -1,8 +1,18 @@
+export interface BridgeSubtaskPayload {
+  title: string;
+  status?: 'pending' | 'active' | 'completed' | 'skipped' | 'done';
+}
+
 export interface BridgeTaskPayload {
+  sync_id?: string;
   title: string;
   duration_minutes: number;
   mode: string;
-  subtasks: string[];
+  subtasks: Array<string | BridgeSubtaskPayload>;
+  status?: 'active' | 'paused' | 'completed' | 'cancelled';
+  elapsed_seconds?: number;
+  focused?: boolean;
+  updated_at_ms?: number;
 }
 
 const BRIDGE_BASE = 'http://127.0.0.1:43141';

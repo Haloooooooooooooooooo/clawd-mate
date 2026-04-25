@@ -13,7 +13,15 @@ import { pullTasksForWeb } from './lib/islandBridge';
 import { useStore } from './store/useStore';
 
 export default function App() {
-  const addTask = useStore((state) => state.addTask);
+  const applyBridgeTask = useStore((state) => state.applyBridgeTask);
+  const clearTodayHistory = useStore((state) => state.clearTodayHistory);
+
+  useEffect(() => {
+    const flagKey = '__clawdmate_clear_today_history_once_2026_04_25';
+    if (window.localStorage.getItem(flagKey) === 'done') return;
+    clearTodayHistory();
+    window.localStorage.setItem(flagKey, 'done');
+  }, [clearTodayHistory]);
 
   useEffect(() => {
     let cancelled = false;
@@ -23,14 +31,7 @@ export default function App() {
       if (cancelled || tasks.length === 0) return;
 
       tasks.forEach((task) => {
-        const title = task.title?.trim();
-        const duration = Number(task.duration_minutes);
-        const subtasks = Array.isArray(task.subtasks)
-          ? task.subtasks.filter((item) => typeof item === 'string' && item.trim().length > 0)
-          : [];
-
-        if (!title || !Number.isFinite(duration) || duration <= 0) return;
-        addTask(title, duration, subtasks, { source: 'sync' });
+        applyBridgeTask(task);
       });
     };
 
@@ -43,7 +44,7 @@ export default function App() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [addTask]);
+  }, [applyBridgeTask]);
 
   return (
     <BrowserRouter>
