@@ -97,27 +97,24 @@ export function SimpleMode({ onStart, activateOnStart = true }: SimpleModeProps)
             </button>
           ))}
 
-          <button
-            type="button"
-            onClick={() => setUseCustom(true)}
-            className={`rounded-lg px-3 py-1.5 text-sm transition-all ${
-              useCustom
-                ? 'bg-blue-500 text-white'
-                : 'bg-white/10 text-white/70 hover:bg-white/20'
-            }`}
-          >
-            自定义
-          </button>
-
-          {useCustom && (
+          {useCustom ? (
             <input
               type="number"
               value={duration}
               onChange={(event) => setDuration(Math.max(1, Math.min(180, Number(event.target.value))))}
               min={1}
               max={180}
-              className="w-20 rounded-lg bg-white/10 px-2 py-1.5 text-center text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/30"
+              className="w-20 rounded-lg bg-blue-500 px-2 py-1.5 text-center text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/30"
+              autoFocus
             />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setUseCustom(true)}
+              className="rounded-lg bg-white/10 px-3 py-1.5 text-sm text-white/70 transition-all hover:bg-white/20"
+            >
+              自定义
+            </button>
           )}
         </div>
       </div>

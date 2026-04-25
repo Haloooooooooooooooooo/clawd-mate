@@ -136,7 +136,17 @@ export function DynamicIsland({
     timer.pause();
     if (!activeTaskId) return;
     completeTask(activeTaskId);
-    setActiveTask(null);
+
+    // 切换到下一个并行任务，而不是收起
+    const remainingTasks = tasks.filter(
+      (t) => t.id !== activeTaskId && (t.status === 'active' || t.status === 'paused')
+    );
+    if (remainingTasks.length > 0) {
+      setActiveTask(remainingTasks[0].id);
+      updateTask(remainingTasks[0].id, { status: 'active' });
+    } else {
+      setActiveTask(null);
+    }
   };
 
   const handleSwitchTask = (taskId: string) => {
