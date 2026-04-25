@@ -382,15 +382,8 @@ export const useStore = create<AppState>()(
           return nextState;
         }
 
-        const shouldIgnorePauseOnFocusedTask =
-          mappedStatusRaw === 'paused' &&
-          payload.focused !== true &&
-          state.activeTaskId === existingTask.id;
-        const shouldIgnorePauseAfterLocalSwitch =
-          mappedStatusRaw === 'paused' &&
-          payload.focused !== true &&
-          existingTask.status === 'running' &&
-          now - state.lastLocalFocusAt < 1800;
+        const shouldIgnoreBridgePauseWithoutFocus =
+          mappedStatusRaw === 'paused' && payload.focused !== true;
 
         if (isTerminal) {
           const finalizedTask: Task = {
@@ -428,27 +421,48 @@ export const useStore = create<AppState>()(
         const nextState = {
           tasks: state.tasks.map((task) =>
             task.id === existingTask.id
-              ? {
-                  ...task,
-                  title,
-                  totalDuration,
-                  remainingTime,
-                  status:
-                    shouldIgnorePauseOnFocusedTask || shouldIgnorePauseAfterLocalSwitch
-                      ? task.status
-                      : mappedStatus,
-                  startTime:
-                    shouldIgnorePauseOnFocusedTask || shouldIgnorePauseAfterLocalSwitch
-                      ? task.startTime
-                      : mappedStatus === 'running'
-                        ? Date.now()
-                        : task.startTime,
-                  subtasks: incomingSubtasks.map((subtask, index) => ({
-                    id: task.subtasks[index]?.id || Math.random().toString(36).substring(7),
-                    title: subtask.title,
-                    status: subtask.status
-                  }))
-                }
+              ? (() => {
+                  const bridgeStatus = shouldIgnoreBridgePauseWithoutFocus ? task.status : mappedStatus;
+                  const bridgeRemaining = remainingTime;
+
+                  if (bridgeStatus === 'running') {
+                    const localEffectiveRemaining = getEffectiveRemainingTime(task, now);
+                    const allowIncrease = totalDuration > task.totalDuration;
+                    const adjustedRemaining = allowIncrease
+                      ? bridgeRemaining
+                      : Math.min(localEffectiveRemaining, bridgeRemaining);
+
+                    return {
+                      ...task,
+                      title,
+                      totalDuration,
+                      status: 'running' as const,
+                      // Core guarantee: while running, remaining time never rolls back (increases)
+                      // unless the user explicitly extended duration.
+                      remainingTime: adjustedRemaining,
+                      startTime: now,
+                      subtasks: incomingSubtasks.map((subtask, index) => ({
+                        id: task.subtasks[index]?.id || Math.random().toString(36).substring(7),
+                        title: subtask.title,
+                        status: subtask.status
+                      }))
+                    };
+                  }
+
+                  return {
+                    ...task,
+                    title,
+                    totalDuration,
+                    remainingTime: bridgeRemaining,
+                    status: bridgeStatus,
+                    startTime: task.startTime,
+                    subtasks: incomingSubtasks.map((subtask, index) => ({
+                      id: task.subtasks[index]?.id || Math.random().toString(36).substring(7),
+                      title: subtask.title,
+                      status: subtask.status
+                    }))
+                  };
+                })()
               : task
           ),
           activeTaskId: canApplyFocus ? existingTask.id : state.activeTaskId,
