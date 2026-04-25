@@ -8,11 +8,16 @@ import { pushTaskFromIsland } from '../../lib/islandBridge';
 interface SimpleModeProps {
   onStart: (task: Task) => void;
   activateOnStart?: boolean;
+  switchToTaskOnStart?: boolean;
 }
 
 const PRESET_DURATIONS = [15, 30, 45, 60, 90];
 
-export function SimpleMode({ onStart, activateOnStart = true }: SimpleModeProps) {
+export function SimpleMode({
+  onStart,
+  activateOnStart = true,
+  switchToTaskOnStart = true
+}: SimpleModeProps) {
   const [title, setTitle] = useState('');
   const [duration, setDuration] = useState(30);
   const [useCustom, setUseCustom] = useState(false);
@@ -27,10 +32,10 @@ export function SimpleMode({ onStart, activateOnStart = true }: SimpleModeProps)
       id: uuidv4(),
       title: title.trim(),
       mode: 'simple',
-      status: 'active',
+      status: activateOnStart ? 'active' : 'paused',
       plannedDuration: duration,
       actualDuration: 0,
-      startedAt: new Date(),
+      startedAt: activateOnStart ? new Date() : null,
       completedAt: null,
       subTasks: [],
       createdAt: new Date()
@@ -43,7 +48,7 @@ export function SimpleMode({ onStart, activateOnStart = true }: SimpleModeProps)
       mode: task.mode,
       subtasks: []
     });
-    if (activateOnStart) {
+    if (switchToTaskOnStart) {
       setActiveTask(task.id);
     }
     onStart(task);

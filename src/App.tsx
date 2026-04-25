@@ -27,12 +27,7 @@ function App() {
       const incoming = await pullTasksForIsland();
       if (cancelled || incoming.length === 0) return;
 
-      const storeState = useTaskStore.getState();
-      const hasCurrentActive = storeState.tasks.some(
-        (task) => task.id === storeState.activeTaskId && task.status === 'active'
-      );
-
-      incoming.forEach((item, index) => {
+      incoming.forEach((item) => {
         const title = item.title?.trim();
         const plannedDuration = Number(item.duration_minutes);
         const subtaskTitles = Array.isArray(item.subtasks)
@@ -44,30 +39,34 @@ function App() {
         }
 
         const taskId = uuidv4();
-        const shouldActivate = !hasCurrentActive && index === 0;
+        const storeState = useTaskStore.getState();
+        const hasCurrentActive = storeState.tasks.some(
+          (task) => task.id === storeState.activeTaskId && task.status === 'active'
+        );
+        const shouldSetAsMain = !hasCurrentActive;
 
         addTask({
           id: taskId,
           title,
           mode: subtaskTitles.length > 0 ? 'structured' : 'simple',
-          status: shouldActivate ? 'active' : 'paused',
+          status: 'active',
           plannedDuration,
           actualDuration: 0,
-          startedAt: shouldActivate ? new Date() : null,
+          startedAt: new Date(),
           completedAt: null,
           subTasks: subtaskTitles.map((subtaskTitle, subtaskIndex) => ({
             id: uuidv4(),
             title: subtaskTitle,
             order: subtaskIndex,
-            status: shouldActivate && subtaskIndex === 0 ? 'active' : 'pending',
+            status: subtaskIndex === 0 ? 'active' : 'pending',
             duration: 0,
-            startedAt: shouldActivate && subtaskIndex === 0 ? new Date() : null,
+            startedAt: subtaskIndex === 0 ? new Date() : null,
             completedAt: null
           })),
           createdAt: new Date()
         });
 
-        if (shouldActivate) {
+        if (shouldSetAsMain) {
           setActiveTask(taskId);
           setExpandOnTaskStartKey((value) => value + 1);
         }
@@ -142,7 +141,7 @@ function App() {
                   </button>
                 </div>
 
-                <div className="flex-1 min-h-0">
+                <div className="flex-1 min-h-0 overflow-y-auto pr-1">
                   <TaskInput onTaskStart={handleTaskStart} keepCurrentActiveTask={hasActiveTask} />
                 </div>
               </div>

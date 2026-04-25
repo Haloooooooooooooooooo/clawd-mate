@@ -25,6 +25,20 @@ export default function Dashboard() {
   const currentTask = activeTasks[activeTaskIndex];
   const isFinished = currentTask && currentTask.remainingTime <= 0;
 
+  // Keep selected index valid after task completion/cancellation.
+  useEffect(() => {
+    if (activeTasks.length === 0) {
+      if (activeTaskIndex !== 0) {
+        setActiveTaskIndex(0);
+      }
+      return;
+    }
+
+    if (activeTaskIndex >= activeTasks.length) {
+      setActiveTaskIndex(activeTasks.length - 1);
+    }
+  }, [activeTaskIndex, activeTasks.length]);
+
   // Auto-scroll to finished task
   useEffect(() => {
     const finishedTask = activeTasks.find((t, i) => t.remainingTime <= 0 && i !== activeTaskIndex);
@@ -265,7 +279,7 @@ export default function Dashboard() {
               transition={isFinished ? { repeat: Infinity, duration: 2, ease: "easeInOut" } : {}}
               className="bg-white border border-border-main rounded-[4px] p-8 shadow-sm relative overflow-hidden paper-texture min-h-[400px] flex flex-col justify-center"
             >
-              {activeTasks.length > 0 ? (
+              {activeTasks.length > 0 && currentTask ? (
                 <div className="flex flex-col space-y-6">
                   {/* Header */}
                   <div className="flex justify-between items-center">

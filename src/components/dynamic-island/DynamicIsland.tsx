@@ -36,6 +36,7 @@ export function DynamicIsland({
 
   const timer = useTimer({
     plannedDuration: activeTask?.plannedDuration || 25,
+    initialElapsed: activeTask?.actualDuration || 0,
     onTick: (elapsed) => {
       if (activeTaskId) {
         updateTask(activeTaskId, { actualDuration: elapsed });
@@ -67,6 +68,22 @@ export function DynamicIsland({
     }
   }, [activeTask?.id, activeTask?.status]);
 
+  // Keep parallel running tasks progressing even when they are not the focused main task.
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      const store = useTaskStore.getState();
+      const runningParallelTasks = store.tasks.filter(
+        (task) => task.id !== store.activeTaskId && task.status === 'active'
+      );
+
+      runningParallelTasks.forEach((task) => {
+        store.updateTask(task.id, { actualDuration: task.actualDuration + 1 });
+      });
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     if (activeTask) {
       reminder.reset();
@@ -82,7 +99,7 @@ export function DynamicIsland({
   }, [activeTask, isExpanded, onLayoutModeChange]);
 
   useEffect(() => {
-    if (!isExpanded) return;
+    if (!isExpanded || composerOpen) return;
 
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
@@ -104,7 +121,7 @@ export function DynamicIsland({
       window.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isExpanded]);
+  }, [composerOpen, isExpanded]);
 
   useEffect(() => {
     if (!activeTaskId) return;
@@ -116,9 +133,25 @@ export function DynamicIsland({
 
   const handleExtend = (minutes: number) => {
     if (!activeTaskId) return;
+    const currentPlannedMinutes = activeTask?.plannedDuration || 25;
+    const currentPlannedSeconds = currentPlannedMinutes * 60;
+    const persistedElapsed = activeTask?.actualDuration || 0;
+    const timerElapsed = timer.elapsedSeconds;
+
+    // If user extends right after time-up, keep elapsed baseline at least the old planned time.
+    const nextElapsedBaseline =
+      timerElapsed >= currentPlannedSeconds
+        ? Math.max(persistedElapsed, currentPlannedSeconds)
+        : Math.max(persistedElapsed, timerElapsed);
+
     updateTask(activeTaskId, {
-      plannedDuration: (activeTask?.plannedDuration || 25) + minutes
+      plannedDuration: currentPlannedMinutes + minutes,
+      actualDuration: nextElapsedBaseline
     });
+    if (!timer.isRunning) {
+      timer.start();
+      updateTask(activeTaskId, { status: 'active' });
+    }
     reminder.resetType('timeUp');
   };
 
@@ -178,6 +211,37 @@ export function DynamicIsland({
       return;
     }
     completeTask(taskId);
+  };
+
+  const handleCancelTask = (taskId: string) => {
+    if (taskId === activeTaskId) {
+      handleCancel();
+      return;
+    }
+    updateTask(taskId, { status: 'cancelled' });
+    removeTask(taskId);
+  };
+
+  const handleExtendTask = (taskId: string, minutes: number) => {
+    const targetTask = tasks.find((task) => task.id === taskId);
+    if (!targetTask) return;
+
+    if (taskId === activeTaskId) {
+      handleExtend(minutes);
+      return;
+    }
+
+    const currentPlannedSeconds = targetTask.plannedDuration * 60;
+    const nextElapsedBaseline =
+      targetTask.actualDuration >= currentPlannedSeconds
+        ? Math.max(targetTask.actualDuration, currentPlannedSeconds)
+        : targetTask.actualDuration;
+
+    updateTask(taskId, {
+      plannedDuration: targetTask.plannedDuration + minutes,
+      actualDuration: nextElapsedBaseline,
+      status: 'active'
+    });
   };
 
   const handleCancel = () => {
@@ -320,13 +384,17 @@ export function DynamicIsland({
               progress={timer.progress}
               remainingSeconds={timer.remainingSeconds}
               isRunning={timer.isRunning}
+              isOvertime={timer.isOvertime}
               onPause={handlePause}
               onResume={handleResume}
               onComplete={handleComplete}
+              onCancel={handleCancel}
               onExtend={handleExtend}
               onSwitchTask={handleSwitchTask}
               onPauseTask={handlePauseTask}
               onCompleteTask={handleCompleteTask}
+              onCancelTask={handleCancelTask}
+              onExtendTask={handleExtendTask}
               onCompleteSubTask={handleCompleteSubTask}
               onSkipSubTask={handleSkipSubTask}
               onAddTask={() => {

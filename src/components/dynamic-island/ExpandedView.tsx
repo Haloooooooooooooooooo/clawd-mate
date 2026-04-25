@@ -1,4 +1,5 @@
 ﻿import { motion } from 'framer-motion';
+import { Pause, Play, CheckCircle2, X } from 'lucide-react';
 import type { Task } from '../../types/task';
 import { ProgressBar } from './ProgressBar';
 import { SubtaskList } from './SubtaskList';
@@ -10,13 +11,17 @@ interface ExpandedViewProps {
   progress: number;
   remainingSeconds: number;
   isRunning: boolean;
+  isOvertime: boolean;
   onPause: () => void;
   onResume: () => void;
   onComplete: () => void;
+  onCancel: () => void;
   onExtend: (minutes: number) => void;
   onSwitchTask: (taskId: string) => void;
   onPauseTask: (taskId: string) => void;
   onCompleteTask: (taskId: string) => void;
+  onCancelTask: (taskId: string) => void;
+  onExtendTask: (taskId: string, minutes: number) => void;
   onCompleteSubTask: (taskId: string, subTaskId: string) => void;
   onSkipSubTask: (taskId: string, subTaskId: string) => void;
   onAddTask: () => void;
@@ -30,13 +35,17 @@ export function ExpandedView({
   progress,
   remainingSeconds,
   isRunning,
+  isOvertime,
   onPause,
   onResume,
   onComplete,
+  onCancel,
   onExtend,
   onSwitchTask,
   onPauseTask,
   onCompleteTask,
+  onCancelTask,
+  onExtendTask,
   onCompleteSubTask,
   onSkipSubTask,
   onAddTask,
@@ -45,7 +54,11 @@ export function ExpandedView({
 }: ExpandedViewProps) {
   const minutes = Math.floor(remainingSeconds / 60);
   const seconds = remainingSeconds % 60;
-  const elapsedMinutes = Math.floor(task.actualDuration / 60);
+  const plannedSeconds = task.plannedDuration * 60;
+  const overtimeSeconds = Math.max(0, task.actualDuration - plannedSeconds);
+  const overtimeMinutes = Math.floor(overtimeSeconds / 60);
+  const overtimeRemainSeconds = overtimeSeconds % 60;
+  const displayElapsed = Math.floor(task.actualDuration / 60);
   const otherTasks = tasks.filter((item) => item.id !== task.id && item.status !== 'completed');
 
   return (
@@ -87,41 +100,75 @@ export function ExpandedView({
           <div className="mb-2 rounded-[14px] border border-white/10 bg-white/[0.03] p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <div className="text-[13px] text-white/75">
-                剩余 {minutes}:{seconds.toString().padStart(2, '0')}
+                {isOvertime ? (
+                  <span className="text-orange-400">
+                    时间到！已超时：{overtimeMinutes}:{overtimeRemainSeconds.toString().padStart(2, '0')}
+                  </span>
+                ) : (
+                  `剩余 ${minutes}:${seconds.toString().padStart(2, '0')}`
+                )}
               </div>
-              <div className="text-[12px] text-white/62">{elapsedMinutes}/{task.plannedDuration}min</div>
+              <div className="text-[12px] text-white/62">{displayElapsed}/{task.plannedDuration}min</div>
             </div>
             <ProgressBar progress={progress} className="h-2" />
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={isRunning ? onPause : onResume}
-                className="rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-[12px] text-white/85 transition-colors hover:bg-white/15"
-              >
-                {isRunning ? '暂停' : '继续'}
-              </button>
-              <button
-                type="button"
-                onClick={onComplete}
-                className="rounded-full bg-emerald-500 px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-emerald-400"
-              >
-                完成
-              </button>
-              <button
-                type="button"
-                onClick={() => onExtend(5)}
-                className="rounded-full border border-white/10 bg-white/8 px-3 py-1.5 text-[12px] text-white/75 transition-colors hover:bg-white/14"
-              >
-                +5min
-              </button>
-              <button
-                type="button"
-                onClick={() => onExtend(10)}
-                className="rounded-full border border-white/10 bg-white/8 px-3 py-1.5 text-[12px] text-white/75 transition-colors hover:bg-white/14"
-              >
-                +10min
-              </button>
-            </div>
+            {/* Action Buttons */}
+            {isOvertime ? (
+              // 时间结束时的按钮
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={onComplete}
+                  className="flex-[2] rounded-[12px] bg-emerald-500 py-2.5 text-[12px] font-medium text-white transition-colors hover:bg-emerald-400 flex items-center justify-center gap-1.5"
+                >
+                  <CheckCircle2 size={16} />
+                  <span>结束任务</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onExtend(5)}
+                  className="flex-1 rounded-[12px] border border-white/10 bg-white/8 py-2.5 text-[12px] text-white/75 transition-colors hover:bg-white/14 flex flex-col items-center justify-center"
+                >
+                  <span className="text-base">+5</span>
+                  <span className="text-[9px] text-white/50">min</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onExtend(10)}
+                  className="flex-1 rounded-[12px] border border-white/10 bg-white/8 py-2.5 text-[12px] text-white/75 transition-colors hover:bg-white/14 flex flex-col items-center justify-center"
+                >
+                  <span className="text-base">+10</span>
+                  <span className="text-[9px] text-white/50">min</span>
+                </button>
+              </div>
+            ) : (
+              // 任务进行中的按钮
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={isRunning ? onPause : onResume}
+                  className="flex-1 rounded-[12px] border border-white/10 bg-white/8 py-2 text-[12px] font-medium text-white/85 transition-colors hover:bg-white/15 flex items-center justify-center gap-1.5"
+                >
+                  {isRunning ? <Pause size={14} className="text-emerald-400" /> : <Play size={14} className="text-emerald-400" />}
+                  <span>{isRunning ? '暂停' : '继续'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onComplete}
+                  className="flex-1 rounded-[12px] border border-white/10 bg-white/8 py-2 text-[12px] font-medium text-white/85 transition-colors hover:bg-white/15 flex items-center justify-center gap-1.5"
+                >
+                  <CheckCircle2 size={14} className="text-emerald-400" />
+                  <span>完成</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onCancel}
+                  className="flex-1 rounded-[12px] border border-red-400/30 bg-red-500/10 py-2 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20 flex items-center justify-center gap-1.5"
+                >
+                  <X size={14} />
+                  <span>取消</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {task.subTasks.length > 0 && (
@@ -146,6 +193,8 @@ export function ExpandedView({
                     onSwitchTask={onSwitchTask}
                     onPauseTask={onPauseTask}
                     onCompleteTask={onCompleteTask}
+                    onCancelTask={onCancelTask}
+                    onExtendTask={onExtendTask}
                     onCompleteSubTask={onCompleteSubTask}
                     onSkipSubTask={onSkipSubTask}
                   />

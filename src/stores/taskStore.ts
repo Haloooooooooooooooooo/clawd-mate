@@ -116,7 +116,7 @@ export const useTaskStore = create<TaskStore>()(
 
           subTasks[currentIndex] = {
             ...subTasks[currentIndex],
-            status: 'completed',
+            status: 'completed' as const,
             completedAt: new Date()
           };
 
@@ -128,7 +128,7 @@ export const useTaskStore = create<TaskStore>()(
             return {
               ...task,
               subTasks,
-              status: 'completed',
+              status: 'completed' as const,
               completedAt: new Date()
             };
           }
@@ -137,7 +137,7 @@ export const useTaskStore = create<TaskStore>()(
           if (nextIndex < subTasks.length && subTasks[nextIndex].status === 'pending') {
             subTasks[nextIndex] = {
               ...subTasks[nextIndex],
-              status: 'active',
+              status: 'active' as const,
               startedAt: new Date()
             };
           }
@@ -161,7 +161,7 @@ export const useTaskStore = create<TaskStore>()(
 
           subTasks[currentIndex] = {
             ...subTasks[currentIndex],
-            status: 'skipped',
+            status: 'skipped' as const,
             completedAt: new Date()
           };
 
@@ -169,7 +169,7 @@ export const useTaskStore = create<TaskStore>()(
           if (nextIndex < subTasks.length && subTasks[nextIndex].status === 'pending') {
             subTasks[nextIndex] = {
               ...subTasks[nextIndex],
-              status: 'active',
+              status: 'active' as const,
               startedAt: new Date()
             };
           }

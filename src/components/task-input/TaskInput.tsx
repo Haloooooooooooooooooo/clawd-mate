@@ -13,7 +13,7 @@ export function TaskInput({ onTaskStart, keepCurrentActiveTask = false }: TaskIn
   const [mode, setMode] = useState<'simple' | 'structured'>('simple');
 
   return (
-    <div className="flex h-full w-full flex-col">
+    <div className="flex h-full min-h-0 w-full flex-col">
       <div className="mb-4 flex gap-2">
         <button
           onClick={() => setMode('simple')}
@@ -44,9 +44,13 @@ export function TaskInput({ onTaskStart, keepCurrentActiveTask = false }: TaskIn
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
-            className="flex-1"
+            className="flex-1 min-h-0"
           >
-            <SimpleMode onStart={onTaskStart} activateOnStart={!keepCurrentActiveTask} />
+            <SimpleMode
+              onStart={onTaskStart}
+              activateOnStart
+              switchToTaskOnStart={!keepCurrentActiveTask}
+            />
           </motion.div>
         ) : (
           <motion.div
@@ -54,9 +58,13 @@ export function TaskInput({ onTaskStart, keepCurrentActiveTask = false }: TaskIn
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
-            className="flex-1"
+            className="flex-1 min-h-0"
           >
-            <StructuredMode onStart={onTaskStart} activateOnStart={!keepCurrentActiveTask} />
+            <StructuredMode
+              onStart={onTaskStart}
+              activateOnStart
+              switchToTaskOnStart={!keepCurrentActiveTask}
+            />
           </motion.div>
         )}
       </AnimatePresence>
