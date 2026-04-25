@@ -6,9 +6,12 @@ import { ProgressBar } from './ProgressBar';
 interface CollapsedViewProps {
   task: Task;
   progress: number;
+  remainingSeconds: number;
+  isOvertime: boolean;
   isRunning: boolean;
   onPause: () => void;
   onComplete: () => void;
+  onExtend: (minutes: number) => void;
   onCancel: () => void;
   onExpand: () => void;
   onCloseIsland: () => void;
@@ -17,9 +20,12 @@ interface CollapsedViewProps {
 export function CollapsedView({
   task,
   progress,
+  remainingSeconds,
+  isOvertime,
   isRunning,
   onPause,
   onComplete,
+  onExtend,
   onCancel,
   onExpand,
   onCloseIsland
@@ -27,6 +33,8 @@ export function CollapsedView({
   const [isHovering, setIsHovering] = useState(false);
   const elapsedMinutes = Math.floor(task.actualDuration / 60);
   const plannedMinutes = Math.max(1, task.plannedDuration);
+  const remainingMinutes = Math.floor(Math.max(0, remainingSeconds) / 60);
+  const remainingRemainSeconds = Math.max(0, remainingSeconds) % 60;
 
   return (
     <motion.div
@@ -74,6 +82,9 @@ export function CollapsedView({
                 {elapsedMinutes}/{plannedMinutes}min
               </div>
             </div>
+            <div className="mb-1 text-[11px] text-white/60">
+              {isOvertime ? '时间到！' : `剩余 ${remainingMinutes}:${remainingRemainSeconds.toString().padStart(2, '0')}`}
+            </div>
             <ProgressBar progress={progress} className="h-1.5" />
           </div>
 
@@ -85,39 +96,79 @@ export function CollapsedView({
                 exit={{ opacity: 0, x: 6 }}
                 className="ml-1 flex items-center gap-1.5"
               >
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onPause();
-                  }}
-                  className="h-[22px] rounded-full border border-white/10 bg-white/10 px-2.5 text-[10px] text-white/80 transition-colors hover:bg-white/15"
-                  aria-label={isRunning ? 'Pause task' : 'Resume task'}
-                >
-                  {isRunning ? '暂停' : '继续'}
-                </button>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onComplete();
-                  }}
-                  className="h-[22px] rounded-full bg-emerald-500 px-2.5 text-[10px] font-medium text-white transition-colors hover:bg-emerald-400"
-                  aria-label="Complete task"
-                >
-                  完成
-                </button>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onCancel();
-                  }}
-                  className="h-[22px] rounded-full border border-white/10 bg-white/8 px-2.5 text-[10px] text-white/70 transition-colors hover:bg-white/14"
-                  aria-label="Cancel task"
-                >
-                  取消
-                </button>
+                {isOvertime ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onComplete();
+                      }}
+                      className="h-[22px] rounded-full bg-emerald-500 px-2.5 text-[10px] font-medium text-white transition-colors hover:bg-emerald-400"
+                      aria-label="Complete task"
+                    >
+                      结束任务
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onExtend(5);
+                      }}
+                      className="h-[22px] rounded-full border border-white/10 bg-white/8 px-2.5 text-[10px] text-white/70 transition-colors hover:bg-white/14"
+                      aria-label="Extend 5 minutes"
+                    >
+                      +5min
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onExtend(10);
+                      }}
+                      className="h-[22px] rounded-full border border-white/10 bg-white/8 px-2.5 text-[10px] text-white/70 transition-colors hover:bg-white/14"
+                      aria-label="Extend 10 minutes"
+                    >
+                      +10min
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onPause();
+                      }}
+                      className="h-[22px] rounded-full border border-white/10 bg-white/10 px-2.5 text-[10px] text-white/80 transition-colors hover:bg-white/15"
+                      aria-label={isRunning ? 'Pause task' : 'Resume task'}
+                    >
+                      {isRunning ? '暂停' : '继续'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onComplete();
+                      }}
+                      className="h-[22px] rounded-full bg-emerald-500 px-2.5 text-[10px] font-medium text-white transition-colors hover:bg-emerald-400"
+                      aria-label="Complete task"
+                    >
+                      完成
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onCancel();
+                      }}
+                      className="h-[22px] rounded-full border border-white/10 bg-white/8 px-2.5 text-[10px] text-white/70 transition-colors hover:bg-white/14"
+                      aria-label="Cancel task"
+                    >
+                      取消
+                    </button>
+                  </>
+                )}
               </motion.div>
             )}
           </AnimatePresence>

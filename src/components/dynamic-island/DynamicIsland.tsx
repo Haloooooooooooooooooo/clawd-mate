@@ -537,9 +537,12 @@ export function DynamicIsland({
               key="collapsed"
               task={activeTask}
               progress={timer.progress}
+              remainingSeconds={timer.remainingSeconds}
+              isOvertime={timer.isOvertime}
               isRunning={timer.isRunning}
               onPause={timer.isRunning ? handlePause : handleResume}
               onComplete={handleComplete}
+              onExtend={handleExtend}
               onCancel={handleCancel}
               onExpand={() => setIsExpanded(true)}
               onCloseIsland={handleCloseIsland}

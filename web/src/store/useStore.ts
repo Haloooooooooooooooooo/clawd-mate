@@ -118,8 +118,8 @@ interface AppState {
   history: DailyRecord[];
   closedSyncIds: Record<string, 'done' | 'cancelled'>;
   lastTaskSyncAtById: Record<string, number>;
+  localStatusLockBySyncId: Record<string, { status: TaskStatus; until: number }>;
   lastFocusSyncAt: number;
-  lastLocalFocusAt: number;
   lastBridgeSyncAt: number;
   activeTaskId: string | null;
   user: User | null;
@@ -212,8 +212,8 @@ export const useStore = create<AppState>()(
       history: [],
       closedSyncIds: {},
       lastTaskSyncAtById: {},
+      localStatusLockBySyncId: {},
       lastFocusSyncAt: 0,
-      lastLocalFocusAt: 0,
       lastBridgeSyncAt: 0,
       activeTaskId: null,
       user: null,
@@ -278,8 +278,7 @@ export const useStore = create<AppState>()(
         const lastTaskSyncAt = state.lastTaskSyncAtById[syncId] || 0;
         const canApplyTaskUpdate = incomingUpdatedAt >= lastTaskSyncAt;
         const canApplyFocus = payload.focused === true && incomingUpdatedAt >= state.lastFocusSyncAt;
-        const mappedStatus =
-          canApplyFocus && mappedStatusRaw === 'paused' ? 'running' : mappedStatusRaw;
+        const mappedStatus = mappedStatusRaw;
         const isTerminal = mappedStatus === 'done' || mappedStatus === 'cancelled';
         const elapsedSeconds = Number.isFinite(payload.elapsed_seconds)
           ? Math.max(0, Number(payload.elapsed_seconds))
@@ -320,11 +319,22 @@ export const useStore = create<AppState>()(
         }
 
         const existingTask = state.tasks.find((task) => task.syncId === syncId);
+        const activeStatusLocks = Object.fromEntries(
+          Object.entries(state.localStatusLockBySyncId).filter(([, lock]) => lock.until > now)
+        ) as Record<string, { status: TaskStatus; until: number }>;
+        const statusLock = activeStatusLocks[syncId];
+        const shouldKeepLocalStatus =
+          Boolean(statusLock) &&
+          !isTerminal &&
+          statusLock.status !== mappedStatus &&
+          now < statusLock.until;
+
         if (!existingTask) {
           if (isTerminal) {
             const nextState = {
               ...state,
               lastBridgeSyncAt: now,
+              localStatusLockBySyncId: activeStatusLocks,
               lastTaskSyncAtById: {
                 ...state.lastTaskSyncAtById,
                 [syncId]: incomingUpdatedAt
@@ -340,6 +350,7 @@ export const useStore = create<AppState>()(
             const nextState = {
               ...state,
               lastBridgeSyncAt: now,
+              localStatusLockBySyncId: activeStatusLocks,
               lastTaskSyncAtById: {
                 ...state.lastTaskSyncAtById,
                 [syncId]: incomingUpdatedAt
@@ -370,6 +381,7 @@ export const useStore = create<AppState>()(
             tasks: [...state.tasks, createdTask],
             activeTaskId: canApplyFocus ? createdTask.id : (state.activeTaskId || createdTask.id),
             lastBridgeSyncAt: now,
+            localStatusLockBySyncId: activeStatusLocks,
             lastTaskSyncAtById: {
               ...state.lastTaskSyncAtById,
               [syncId]: incomingUpdatedAt
@@ -381,9 +393,6 @@ export const useStore = create<AppState>()(
           }
           return nextState;
         }
-
-        const shouldIgnoreBridgePauseWithoutFocus =
-          mappedStatusRaw === 'paused' && payload.focused !== true;
 
         if (isTerminal) {
           const finalizedTask: Task = {
@@ -422,24 +431,18 @@ export const useStore = create<AppState>()(
           tasks: state.tasks.map((task) =>
             task.id === existingTask.id
               ? (() => {
-                  const bridgeStatus = shouldIgnoreBridgePauseWithoutFocus ? task.status : mappedStatus;
+                  const bridgeStatus = mappedStatus;
                   const bridgeRemaining = remainingTime;
+                  const nextStatus = shouldKeepLocalStatus ? task.status : bridgeStatus;
 
-                  if (bridgeStatus === 'running') {
-                    const localEffectiveRemaining = getEffectiveRemainingTime(task, now);
-                    const allowIncrease = totalDuration > task.totalDuration;
-                    const adjustedRemaining = allowIncrease
-                      ? bridgeRemaining
-                      : Math.min(localEffectiveRemaining, bridgeRemaining);
-
+                  if (nextStatus === 'running') {
                     return {
                       ...task,
                       title,
                       totalDuration,
                       status: 'running' as const,
-                      // Core guarantee: while running, remaining time never rolls back (increases)
-                      // unless the user explicitly extended duration.
-                      remainingTime: adjustedRemaining,
+                      // Bridge is source of truth when packet is newer.
+                      remainingTime: bridgeRemaining,
                       startTime: now,
                       subtasks: incomingSubtasks.map((subtask, index) => ({
                         id: task.subtasks[index]?.id || Math.random().toString(36).substring(7),
@@ -454,7 +457,7 @@ export const useStore = create<AppState>()(
                     title,
                     totalDuration,
                     remainingTime: bridgeRemaining,
-                    status: bridgeStatus,
+                    status: nextStatus,
                     startTime: task.startTime,
                     subtasks: incomingSubtasks.map((subtask, index) => ({
                       id: task.subtasks[index]?.id || Math.random().toString(36).substring(7),
@@ -467,6 +470,7 @@ export const useStore = create<AppState>()(
           ),
           activeTaskId: canApplyFocus ? existingTask.id : state.activeTaskId,
           lastBridgeSyncAt: now,
+          localStatusLockBySyncId: activeStatusLocks,
           lastTaskSyncAtById: {
             ...state.lastTaskSyncAtById,
             [syncId]: incomingUpdatedAt
@@ -480,7 +484,20 @@ export const useStore = create<AppState>()(
       }),
 
       updateTaskStatus: (id, status) => {
+        const now = Date.now();
+        let syncIdForLock = '';
         set((state) => ({
+          localStatusLockBySyncId: (() => {
+            const activeLocks = Object.fromEntries(
+              Object.entries(state.localStatusLockBySyncId).filter(([, lock]) => lock.until > now)
+            ) as Record<string, { status: TaskStatus; until: number }>;
+            const targetTask = state.tasks.find((task) => task.id === id);
+            syncIdForLock = targetTask?.syncId || targetTask?.id || '';
+            if (syncIdForLock) {
+              activeLocks[syncIdForLock] = { status, until: now + 1600 };
+            }
+            return activeLocks;
+          })(),
           tasks: state.tasks.map((task) => {
             if (task.id !== id) return task;
 
@@ -510,7 +527,16 @@ export const useStore = create<AppState>()(
         }
         const updatedTask = get().tasks.find((task) => task.id === id);
         if (updatedTask) {
-          void pushTaskFromWeb(buildBridgePayload(updatedTask, status));
+          const payload = buildBridgePayload(updatedTask, status);
+          if (syncIdForLock && typeof payload.updated_at_ms === 'number') {
+            set((state) => ({
+              lastTaskSyncAtById: {
+                ...state.lastTaskSyncAtById,
+                [syncIdForLock]: payload.updated_at_ms as number
+              }
+            }));
+          }
+          void pushTaskFromWeb(payload);
         }
       },
 
@@ -637,8 +663,7 @@ export const useStore = create<AppState>()(
         if (id === prevActiveTaskId) return;
 
         set(() => ({
-          activeTaskId: id,
-          lastLocalFocusAt: Date.now()
+          activeTaskId: id
         }));
         if (!id) return;
 

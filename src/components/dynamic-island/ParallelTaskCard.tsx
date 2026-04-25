@@ -27,9 +27,11 @@ export function ParallelTaskCard({
 }: ParallelTaskCardProps) {
   const [expanded, setExpanded] = useState(false);
   const progress = Math.min(1, task.actualDuration / Math.max(1, task.plannedDuration * 60));
-  const elapsedMinutes = Math.floor(task.actualDuration / 60);
   const isRunning = task.status === 'active';
   const isOvertime = task.actualDuration >= task.plannedDuration * 60;
+  const remainingSeconds = Math.max(0, task.plannedDuration * 60 - task.actualDuration);
+  const remainingMinutes = Math.floor(remainingSeconds / 60);
+  const remainingRemainSeconds = remainingSeconds % 60;
   const overtimeSeconds = Math.max(0, task.actualDuration - task.plannedDuration * 60);
   const overtimeMinutes = Math.floor(overtimeSeconds / 60);
   const overtimeRemainSeconds = overtimeSeconds % 60;
@@ -53,7 +55,11 @@ export function ParallelTaskCard({
         >
           {task.title}
         </button>
-        <span className="text-[11px] text-white/45">{elapsedMinutes}/{task.plannedDuration}min</span>
+        <span className="text-[11px] text-white/45">
+          {isOvertime
+            ? `超时 ${overtimeMinutes}:${overtimeRemainSeconds.toString().padStart(2, '0')}`
+            : `剩余 ${remainingMinutes}:${remainingRemainSeconds.toString().padStart(2, '0')}`}
+        </span>
       </div>
 
       <ProgressBar progress={progress} className="mb-2 h-1.5" />
