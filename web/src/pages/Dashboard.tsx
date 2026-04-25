@@ -45,47 +45,52 @@ function normalizeSubtasks(input: unknown): DashboardSubtask[] {
 }
 
 export default function Dashboard() {
-  const { tasks, activeTaskId, lastBridgeSyncAt, addTask, updateRemainingTime, completeTask, cancelTask, toggleSubtask, skipSubtask, history, addTimeToTask, setActiveTask } = useStore();
+  const { tasks, activeTaskId, addTask, completeTask, cancelTask, toggleSubtask, skipSubtask, history, addTimeToTask, setActiveTask } = useStore();
   const [taskTitle, setTaskTitle] = useState('');
   const [duration, setDuration] = useState(30);
   const [mode, setMode] = useState<'minimal' | 'structured'>('minimal');
   const [subtaskInput, setSubtaskInput] = useState('');
   const [subtasks, setSubtasks] = useState<string[]>([]);
   const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
+  const [nowTick, setNowTick] = useState(() => Date.now());
   const parallelTasksRef = useRef<HTMLDivElement>(null);
   const historyListRef = useRef<HTMLDivElement>(null);
+
+  const getTaskRemaining = (task: { status: string; startTime: number; remainingTime: number }) => {
+    if (task.status !== 'running') return Math.max(0, task.remainingTime);
+    const elapsedSinceResume = Math.max(0, Math.floor((nowTick - task.startTime) / 1000));
+    return Math.max(0, task.remainingTime - elapsedSinceResume);
+  };
+
+  const getTaskElapsed = (task: { totalDuration: number; status: string; startTime: number; remainingTime: number }) =>
+    Math.max(0, task.totalDuration - getTaskRemaining(task));
 
   const activeTasks = tasks.filter(t => t.status === 'running' || t.status === 'paused');
   const focusedTaskIndex = activeTasks.findIndex((task) => task.id === activeTaskId);
   const currentTask = focusedTaskIndex >= 0 ? activeTasks[focusedTaskIndex] : activeTasks[0];
   const currentTaskSubtasks = normalizeSubtasks(currentTask?.subtasks);
   const currentTaskId = currentTask?.id ?? null;
-  const isFinished = currentTask && currentTask.remainingTime <= 0;
+  const currentTaskRemaining = currentTask ? getTaskRemaining(currentTask) : 0;
+  const currentTaskElapsed = currentTask ? getTaskElapsed(currentTask) : 0;
+  const isFinished = Boolean(currentTask) && currentTaskRemaining <= 0;
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setNowTick(Date.now());
+    }, 500);
+    return () => window.clearInterval(interval);
+  }, []);
 
   // Auto-scroll to finished task
   useEffect(() => {
-    const finishedTask = activeTasks.find((task) => task.remainingTime <= 0 && task.id !== currentTaskId);
+    const finishedTask = activeTasks.find((task) => getTaskRemaining(task) <= 0 && task.id !== currentTaskId);
     if (finishedTask) {
       const element = document.getElementById(`task-preview-${finishedTask.id}`);
       if (element) {
         element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
     }
-  }, [activeTasks, currentTaskId]);
-
-  // Timer loop
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const bridgeIsFresh = Date.now() - lastBridgeSyncAt < 2500;
-      if (bridgeIsFresh) return;
-      activeTasks.forEach(task => {
-        if (task.status === 'running') {
-          updateRemainingTime(task.id, 1);
-        }
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [activeTasks, lastBridgeSyncAt, updateRemainingTime]);
+  }, [activeTasks, currentTaskId, nowTick]);
 
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -404,7 +409,7 @@ export default function Dashboard() {
                     <div className="w-full h-1.5 bg-paper-mist rounded-[4px] overflow-hidden">
                       <motion.div 
                         initial={{ width: 0 }}
-                        animate={{ width: `${((currentTask.totalDuration - currentTask.remainingTime) / currentTask.totalDuration) * 100}%` }}
+                        animate={{ width: `${(currentTaskElapsed / currentTask.totalDuration) * 100}%` }}
                         className="h-full bg-primary"
                       />
                     </div>
@@ -414,7 +419,7 @@ export default function Dashboard() {
                   <div className="flex justify-between items-end">
                     <div className="space-y-0.5">
                       <span className="font-display text-4xl font-bold text-ink leading-none">
-                        {formatTime(currentTask.remainingTime)}
+                        {formatTime(currentTaskRemaining)}
                       </span>
                       <p className="text-[10px] font-bold text-muted-text uppercase tracking-widest leading-none">
                         剩余时长
@@ -422,7 +427,7 @@ export default function Dashboard() {
                     </div>
                     <div className="text-right space-y-0.5">
                       <span className="font-display text-xl font-bold text-ink leading-none">
-                        {Math.floor((currentTask.totalDuration - currentTask.remainingTime) / 60)}/{currentTask.totalDuration / 60}min
+                        {Math.floor(currentTaskElapsed / 60)}/{currentTask.totalDuration / 60}min
                       </span>
                       <p className="text-[10px] font-bold text-muted-text uppercase tracking-widest leading-none">
                         进度比例
@@ -494,7 +499,9 @@ export default function Dashboard() {
                       <div className="space-y-2 max-h-64 overflow-y-auto pr-1 scrollbar-hide snap-y" ref={parallelTasksRef}>
                         {activeTasks.map((task) => {
                           if (task.id === currentTaskId) return null;
-                          const isTaskFinished = task.remainingTime <= 0;
+                          const taskRemaining = getTaskRemaining(task);
+                          const taskElapsed = getTaskElapsed(task);
+                          const isTaskFinished = taskRemaining <= 0;
                           return (
                             <motion.div 
                               key={task.id} 
@@ -526,7 +533,7 @@ export default function Dashboard() {
                                     <motion.div 
                                       initial={{ width: 0 }}
                                       animate={{ 
-                                        width: `${((task.totalDuration - task.remainingTime) / task.totalDuration) * 100}%`
+                                        width: `${(taskElapsed / task.totalDuration) * 100}%`
                                       }}
                                       className={cn("h-full", isTaskFinished ? "bg-primary" : "bg-primary/30")}
                                     />
@@ -535,7 +542,7 @@ export default function Dashboard() {
                                 <div className="text-right shrink-0 flex items-center gap-3 relative min-w-[40px]">
                                   <div className={cn("transition-all duration-300 flex items-center gap-2", "group-hover:opacity-20 group-hover:scale-90")}>
                                     <p className={cn("text-xs font-mono font-bold", isTaskFinished ? "text-primary" : "text-stone-400")}>
-                                      {formatTime(task.remainingTime)}
+                                      {formatTime(taskRemaining)}
                                     </p>
                                     <ChevronRight size={12} className="text-stone-300" />
                                   </div>

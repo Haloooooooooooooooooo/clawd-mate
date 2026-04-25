@@ -78,9 +78,24 @@ function normalizeSubtasksForBridge(task: Task): Array<{ title: string; status: 
     .filter((subtask): subtask is { title: string; status: SubtaskStatus } => Boolean(subtask));
 }
 
+function getEffectiveRemainingTime(task: Task, now = Date.now()): number {
+  if (task.status !== 'running') {
+    return Math.max(0, task.remainingTime);
+  }
+  const elapsedSinceResume = Math.max(0, Math.floor((now - task.startTime) / 1000));
+  return Math.max(0, task.remainingTime - elapsedSinceResume);
+}
+
+function getEffectiveElapsedSeconds(task: Task, now = Date.now()): number {
+  return Math.max(0, task.totalDuration - getEffectiveRemainingTime(task, now));
+}
+
 function buildBridgePayload(task: Task, statusOverride?: TaskStatus, focusedOverride?: boolean): BridgeTaskPayload {
+  const now = Date.now();
   const status = statusOverride ?? task.status;
-  const elapsedSeconds = Math.max(0, task.totalDuration - task.remainingTime);
+  const elapsedSeconds = status === 'running'
+    ? getEffectiveElapsedSeconds(task, now)
+    : Math.max(0, task.totalDuration - task.remainingTime);
   const normalizedSubtasks = normalizeSubtasksForBridge(task);
   return {
     sync_id: task.syncId || task.id,
@@ -94,7 +109,7 @@ function buildBridgePayload(task: Task, statusOverride?: TaskStatus, focusedOver
     status: mapWebStatusToBridge(status),
     elapsed_seconds: elapsedSeconds,
     focused: focusedOverride,
-    updated_at_ms: Date.now()
+    updated_at_ms: now
   };
 }
 
@@ -104,6 +119,7 @@ interface AppState {
   closedSyncIds: Record<string, 'done' | 'cancelled'>;
   lastTaskSyncAtById: Record<string, number>;
   lastFocusSyncAt: number;
+  lastLocalFocusAt: number;
   lastBridgeSyncAt: number;
   activeTaskId: string | null;
   user: User | null;
@@ -197,6 +213,7 @@ export const useStore = create<AppState>()(
       closedSyncIds: {},
       lastTaskSyncAtById: {},
       lastFocusSyncAt: 0,
+      lastLocalFocusAt: 0,
       lastBridgeSyncAt: 0,
       activeTaskId: null,
       user: null,
@@ -214,7 +231,7 @@ export const useStore = create<AppState>()(
           title,
           totalDuration,
           remainingTime,
-          startTime: Date.now() - elapsedSeconds * 1000,
+          startTime: Date.now(),
           status: normalizedStatus,
           subtasks: subtaskTitles.map((subtask) => ({
             id: Math.random().toString(36).substring(7),
@@ -340,7 +357,7 @@ export const useStore = create<AppState>()(
             title,
             totalDuration,
             remainingTime,
-            startTime: Date.now() - elapsedSeconds * 1000,
+            startTime: mappedStatus === 'running' ? Date.now() : Date.now() - elapsedSeconds * 1000,
             status: mappedStatus,
             subtasks: incomingSubtasks.map((subtask) => ({
               id: Math.random().toString(36).substring(7),
@@ -369,6 +386,11 @@ export const useStore = create<AppState>()(
           mappedStatusRaw === 'paused' &&
           payload.focused !== true &&
           state.activeTaskId === existingTask.id;
+        const shouldIgnorePauseAfterLocalSwitch =
+          mappedStatusRaw === 'paused' &&
+          payload.focused !== true &&
+          existingTask.status === 'running' &&
+          now - state.lastLocalFocusAt < 1800;
 
         if (isTerminal) {
           const finalizedTask: Task = {
@@ -411,7 +433,16 @@ export const useStore = create<AppState>()(
                   title,
                   totalDuration,
                   remainingTime,
-                  status: shouldIgnorePauseOnFocusedTask ? task.status : mappedStatus,
+                  status:
+                    shouldIgnorePauseOnFocusedTask || shouldIgnorePauseAfterLocalSwitch
+                      ? task.status
+                      : mappedStatus,
+                  startTime:
+                    shouldIgnorePauseOnFocusedTask || shouldIgnorePauseAfterLocalSwitch
+                      ? task.startTime
+                      : mappedStatus === 'running'
+                        ? Date.now()
+                        : task.startTime,
                   subtasks: incomingSubtasks.map((subtask, index) => ({
                     id: task.subtasks[index]?.id || Math.random().toString(36).substring(7),
                     title: subtask.title,
@@ -436,7 +467,28 @@ export const useStore = create<AppState>()(
 
       updateTaskStatus: (id, status) => {
         set((state) => ({
-          tasks: state.tasks.map((task) => (task.id === id ? { ...task, status } : task))
+          tasks: state.tasks.map((task) => {
+            if (task.id !== id) return task;
+
+            if (status === 'paused' && task.status === 'running') {
+              return {
+                ...task,
+                status: 'paused',
+                remainingTime: getEffectiveRemainingTime(task),
+                startTime: Date.now()
+              };
+            }
+
+            if (status === 'running' && task.status !== 'running') {
+              return {
+                ...task,
+                status: 'running',
+                startTime: Date.now()
+              };
+            }
+
+            return { ...task, status };
+          })
         }));
         const stateAfterUpdate = get();
         if (stateAfterUpdate.isLoggedIn && stateAfterUpdate.user?.id) {
@@ -452,7 +504,11 @@ export const useStore = create<AppState>()(
         set((state) => ({
           tasks: state.tasks.map((task) =>
             task.id === id && task.status === 'running'
-              ? { ...task, remainingTime: Math.max(0, task.remainingTime - delta) }
+              ? {
+                  ...task,
+                  remainingTime: Math.max(0, task.remainingTime - delta),
+                  startTime: Date.now()
+                }
               : task
           )
         }));
@@ -566,13 +622,9 @@ export const useStore = create<AppState>()(
         const prevActiveTaskId = get().activeTaskId;
         if (id === prevActiveTaskId) return;
 
-        set((state) => ({
+        set(() => ({
           activeTaskId: id,
-          tasks: state.tasks.map((item) =>
-            item.id === id && item.status !== 'done' && item.status !== 'cancelled'
-              ? { ...item, status: 'running' as const }
-              : item
-          )
+          lastLocalFocusAt: Date.now()
         }));
         if (!id) return;
 
@@ -595,14 +647,19 @@ export const useStore = create<AppState>()(
         if (stateAfterUpdate.isLoggedIn && stateAfterUpdate.user?.id) {
           queueCloudSync();
         }
-        void pushTaskFromWeb(buildBridgePayload(taskToSync, 'running', true));
+        void pushTaskFromWeb(buildBridgePayload(taskToSync, undefined, true));
       },
 
       completeTask: (id) => set((state) => {
         const task = state.tasks.find((item) => item.id === id);
         if (!task) return state;
 
-        const finalizedTask: Task = { ...task, status: 'done', endTime: Date.now() };
+        const finalizedTask: Task = {
+          ...task,
+          status: 'done',
+          remainingTime: getEffectiveRemainingTime(task),
+          endTime: Date.now()
+        };
         void pushTaskFromWeb(buildBridgePayload(finalizedTask, 'done'));
         const syncId = task.syncId || task.id;
         const nextState = {
@@ -624,7 +681,12 @@ export const useStore = create<AppState>()(
         const task = state.tasks.find((item) => item.id === id);
         if (!task) return state;
 
-        const finalizedTask: Task = { ...task, status: 'cancelled', endTime: Date.now() };
+        const finalizedTask: Task = {
+          ...task,
+          status: 'cancelled',
+          remainingTime: getEffectiveRemainingTime(task),
+          endTime: Date.now()
+        };
         void pushTaskFromWeb(buildBridgePayload(finalizedTask, 'cancelled'));
         const syncId = task.syncId || task.id;
         const nextState = {
@@ -649,8 +711,12 @@ export const useStore = create<AppState>()(
             task.id === id
               ? {
                   ...task,
-                  remainingTime: task.remainingTime + deltaSeconds,
-                  totalDuration: task.totalDuration + deltaSeconds
+                  remainingTime:
+                    task.status === 'running'
+                      ? getEffectiveRemainingTime(task) + deltaSeconds
+                      : task.remainingTime + deltaSeconds,
+                  totalDuration: task.totalDuration + deltaSeconds,
+                  startTime: task.status === 'running' ? Date.now() : task.startTime
                 }
               : task
           )
