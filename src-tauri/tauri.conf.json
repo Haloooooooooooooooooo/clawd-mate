@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "identifier": "com.clawdmate.app",
   "build": {
-    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev:island:frontend",
+    "devUrl": "http://localhost:5174",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },

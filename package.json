@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "npm --prefix web run dev",
+    "dev:island": "npm.cmd exec tauri dev",
+    "dev:island:frontend": "vite --host 127.0.0.1 --port 5174 --strictPort",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
