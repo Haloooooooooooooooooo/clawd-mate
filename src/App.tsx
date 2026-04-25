@@ -102,8 +102,16 @@ function App() {
           : undefined;
 
         if (existingTask) {
-          if (status === 'cancelled') {
+          if (status === 'cancelled' || status === 'completed') {
             removeTask(existingTask.id);
+            const remainingTasks = useTaskStore
+              .getState()
+              .tasks.filter((task) => task.status === 'active' || task.status === 'paused');
+            if (remainingTasks.length > 0) {
+              setActiveTask(remainingTasks[0].id);
+            } else {
+              setActiveTask(null);
+            }
             if (syncId) {
               lastTaskSyncAtRef.current[syncId] = incomingUpdatedAt;
             }
@@ -115,7 +123,7 @@ function App() {
             plannedDuration,
             actualDuration: elapsedSeconds,
             status,
-            completedAt: status === 'completed' ? new Date() : null,
+            completedAt: null,
             subTasks: subtaskPayloads.map((subtask, subtaskIndex) => ({
               id: existingTask.subTasks[subtaskIndex]?.id || uuidv4(),
               title: subtask.title,

@@ -104,10 +104,10 @@ export function CollapsedView({
                         event.stopPropagation();
                         onComplete();
                       }}
-                      className="h-[22px] rounded-full bg-emerald-500 px-2.5 text-[10px] font-medium text-white transition-colors hover:bg-emerald-400"
+                      className="h-[22px] rounded-full bg-emerald-500 px-2 text-[11px] font-medium text-white transition-colors hover:bg-emerald-400"
                       aria-label="Complete task"
                     >
-                      结束任务
+                      ✅
                     </button>
                     <button
                       type="button"

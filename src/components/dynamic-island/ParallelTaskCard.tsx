@@ -27,6 +27,7 @@ export function ParallelTaskCard({
 }: ParallelTaskCardProps) {
   const [expanded, setExpanded] = useState(false);
   const progress = Math.min(1, task.actualDuration / Math.max(1, task.plannedDuration * 60));
+  const elapsedMinutes = Math.floor(task.actualDuration / 60);
   const isRunning = task.status === 'active';
   const isOvertime = task.actualDuration >= task.plannedDuration * 60;
   const remainingSeconds = Math.max(0, task.plannedDuration * 60 - task.actualDuration);
@@ -55,19 +56,17 @@ export function ParallelTaskCard({
         >
           {task.title}
         </button>
-        <span className="text-[11px] text-white/45">
+      </div>
+
+      <ProgressBar progress={progress} className="mb-2 h-1.5" />
+      <div className="mb-2 flex items-center justify-between text-[11px]">
+        <span className={isOvertime ? 'text-orange-400' : 'text-white/65'}>
           {isOvertime
             ? `超时 ${overtimeMinutes}:${overtimeRemainSeconds.toString().padStart(2, '0')}`
             : `剩余 ${remainingMinutes}:${remainingRemainSeconds.toString().padStart(2, '0')}`}
         </span>
+        <span className="text-white/45">{elapsedMinutes}/{task.plannedDuration}min</span>
       </div>
-
-      <ProgressBar progress={progress} className="mb-2 h-1.5" />
-      {isOvertime && (
-        <div className="mb-2 text-[11px] text-orange-400">
-          时间到！已超时：{overtimeMinutes}:{overtimeRemainSeconds.toString().padStart(2, '0')}
-        </div>
-      )}
 
       <div className="flex items-center gap-2">
         {isOvertime ? (
