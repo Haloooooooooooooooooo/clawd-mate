@@ -1,5 +1,8 @@
-﻿use serde::{Deserialize, Serialize};
+use base64::Engine;
+use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::env;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{
@@ -42,6 +45,33 @@ struct TaskSyncPayload {
 struct TaskSyncEnvelope {
     source: String,
     task: TaskSyncPayload,
+}
+
+#[derive(Deserialize)]
+struct ImageGenerationApiResponse {
+    data: Vec<ImageGenerationItem>,
+}
+
+#[derive(Deserialize)]
+struct ImageApiErrorEnvelope {
+    #[serde(default)]
+    error: Option<ImageApiErrorBody>,
+    #[serde(default)]
+    message: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ImageApiErrorBody {
+    #[serde(default)]
+    message: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ImageGenerationItem {
+    #[serde(default)]
+    b64_json: Option<String>,
+    #[serde(default)]
+    url: Option<String>,
 }
 
 #[derive(Clone, Default)]
@@ -273,6 +303,191 @@ fn start_bridge_server(app: AppHandle, state: BridgeState) {
     });
 }
 
+fn load_env_files() {
+    let _ = dotenvy::from_filename(".env");
+    let _ = dotenvy::from_filename(".env.local");
+    let _ = dotenvy::from_filename("web/.env");
+    let _ = dotenvy::from_filename("web/.env.local");
+    let _ = dotenvy::from_filename("web/src/lib/.env");
+    let _ = dotenvy::from_filename("web/src/lib/.env.local");
+}
+
+fn load_image_api_key() -> Option<String> {
+    load_env_files();
+
+    env::var("VORTEXAI_API_KEY")
+        .or_else(|_| env::var("IMAGE_API_KEY"))
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn load_image_api_host() -> String {
+    load_env_files();
+
+    env::var("VORTEXAI_API_HOST")
+        .ok()
+        .map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "https://vortexaiapi.com/v1".to_string())
+}
+
+fn load_image_model() -> String {
+    load_env_files();
+
+    env::var("VORTEXAI_IMAGE_MODEL")
+        .or_else(|_| env::var("IMAGE_API_MODEL"))
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "gpt-image-2-2026-04-21".to_string())
+}
+
+fn to_data_url(content_type: &str, bytes: &[u8]) -> String {
+    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+    format!("data:{};base64,{}", content_type, encoded)
+}
+
+fn summarize_image_api_error(status: reqwest::StatusCode, body: &str) -> String {
+    let parsed = serde_json::from_str::<ImageApiErrorEnvelope>(body).ok();
+    let raw_message = parsed
+        .as_ref()
+        .and_then(|payload| {
+            payload
+                .error
+                .as_ref()
+                .and_then(|error| error.message.as_ref())
+                .or(payload.message.as_ref())
+        })
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| body.trim().to_string());
+
+    let normalized = raw_message.to_lowercase();
+
+    if status.as_u16() == 401 || normalized.contains("incorrect api key") || normalized.contains("unauthorized") {
+        return "图片生成失败：API Key 无效或已过期，请检查 .env.local 里的 VORTEXAI_API_KEY。".to_string();
+    }
+
+    if status.as_u16() == 429 || normalized.contains("rate limit") || normalized.contains("quota") {
+        return "图片生成失败：当前请求太频繁或额度不足，请稍后再试。".to_string();
+    }
+
+    if status.as_u16() == 400 || normalized.contains("invalid") || normalized.contains("unsupported") {
+        return format!("图片生成失败：请求参数有误。{}", raw_message);
+    }
+
+    if status.is_server_error() {
+        return "图片生成失败：图片服务暂时不可用，请稍后再试。".to_string();
+    }
+
+    if raw_message.is_empty() {
+        return format!("图片生成失败：图片服务返回异常（{}）。", status);
+    }
+
+    format!("图片生成失败：{}", raw_message)
+}
+
+fn summarize_network_error(error: &reqwest::Error) -> String {
+    if error.is_timeout() {
+        return "图片生成超时了，请稍后重试。".to_string();
+    }
+
+    if error.is_connect() {
+        return "连接图片服务失败，请检查网络或接口地址配置。".to_string();
+    }
+
+    format!("图片请求失败：{}", error)
+}
+
+#[tauri::command]
+async fn generate_daily_report_image(prompt: String) -> Result<String, String> {
+    let api_key = load_image_api_key().ok_or_else(|| {
+        "没有读取到图片 API Key。请在 .env.local 里配置 VORTEXAI_API_KEY。".to_string()
+    })?;
+    let api_host = load_image_api_host();
+    let image_model = load_image_model();
+
+    let client = reqwest::Client::new();
+    let response = client
+        .post(format!("{}/images/generations", api_host))
+        .header(AUTHORIZATION, format!("Bearer {}", api_key))
+        .header(CONTENT_TYPE, "application/json")
+        .json(&serde_json::json!({
+            "model": image_model,
+            "prompt": prompt,
+            "size": "1024x1280"
+        }))
+        .send()
+        .await
+        .map_err(|error| summarize_network_error(&error))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Failed to read error response".to_string());
+        return Err(summarize_image_api_error(status, &body));
+    }
+
+    let payload: ImageGenerationApiResponse = response
+        .json()
+        .await
+        .map_err(|error| format!("图片服务返回的数据解析失败：{}", error))?;
+
+    let image_item = payload
+        .data
+        .into_iter()
+        .next()
+        .ok_or_else(|| "图片服务没有返回可展示的图片数据。".to_string())?;
+
+    if let Some(image_base64) = image_item
+        .b64_json
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        return Ok(format!("data:image/png;base64,{}", image_base64));
+    }
+
+    if let Some(image_url) = image_item
+        .url
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        let image_response = client
+            .get(&image_url)
+            .send()
+            .await
+            .map_err(|error| format!("图片已生成，但下载图片失败：{}", summarize_network_error(&error)))?;
+
+        if !image_response.status().is_success() {
+            let status = image_response.status();
+            let body = image_response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Failed to read image download error response".to_string());
+            return Err(format!("图片已生成，但下载图片失败。{}", summarize_image_api_error(status, &body)));
+        }
+
+        let content_type = image_response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "image/png".to_string());
+
+        let image_bytes = image_response
+            .bytes()
+            .await
+            .map_err(|error| format!("Failed to read generated image bytes: {}", error))?;
+
+        return Ok(to_data_url(&content_type, &image_bytes));
+    }
+
+    Err("图片服务返回成功了，但没有拿到图片地址或图片数据。".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -298,6 +513,7 @@ pub fn run() {
 
             Ok(())
         })
+        .invoke_handler(tauri::generate_handler![generate_daily_report_image])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

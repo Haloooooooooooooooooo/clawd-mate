@@ -30,7 +30,6 @@ function toUiUser(user: SupabaseUser) {
 
 export default function Sidebar() {
   const [showLogout, setShowLogout] = useState(false);
-  const [showLoginModal, setShowLoginModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authName, setAuthName] = useState('');
   const [authEmail, setAuthEmail] = useState('');
@@ -38,7 +37,19 @@ export default function Sidebar() {
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
   const [authSubmitting, setAuthSubmitting] = useState(false);
-  const { isLoggedIn, user, setLoggedIn, hydrateCloudData, syncCloudData, toggleIsland, isIslandVisible, setIslandVisible } = useStore();
+  const {
+    isLoggedIn,
+    user,
+    setLoggedIn,
+    hydrateCloudData,
+    syncCloudData,
+    toggleIsland,
+    isIslandVisible,
+    setIslandVisible,
+    isLoginModalOpen,
+    openLoginModal,
+    closeLoginModal
+  } = useStore();
 
   useEffect(() => {
     let cancelled = false;
@@ -120,7 +131,7 @@ export default function Sidebar() {
   const handleOpenLogin = () => {
     resetAuthForm();
     setAuthMode('login');
-    setShowLoginModal(true);
+    openLoginModal();
   };
 
   const resetAuthForm = () => {
@@ -213,7 +224,7 @@ export default function Sidebar() {
           if (uiUser.id) {
             await hydrateCloudData(uiUser.id);
           }
-          setShowLoginModal(false);
+          closeLoginModal();
           resetAuthForm();
           return;
         }
@@ -348,7 +359,7 @@ export default function Sidebar() {
       </div>
 
       <AnimatePresence>
-        {showLoginModal && (
+        {isLoginModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
@@ -356,7 +367,7 @@ export default function Sidebar() {
               exit={{ opacity: 0 }}
               onClick={() => {
                 resetAuthForm();
-                setShowLoginModal(false);
+                closeLoginModal();
               }}
               className="absolute inset-0 bg-ink/40"
             />
@@ -444,7 +455,7 @@ export default function Sidebar() {
                 </p>
               </div>
 
-              <button onClick={() => { resetAuthForm(); setShowLoginModal(false); }} className="absolute top-6 right-6 p-2 rounded-[4px] hover:bg-[#FFF0DF] transition-colors text-stone-500">
+              <button onClick={() => { resetAuthForm(); closeLoginModal(); }} className="absolute top-6 right-6 p-2 rounded-[4px] hover:bg-[#FFF0DF] transition-colors text-stone-500">
                 <Plus size={20} className="rotate-45" />
               </button>
             </motion.div>

@@ -5,7 +5,7 @@
 
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { Task, TaskStatus, DailyRecord, User, SubtaskStatus } from '../types';
+import { Task, TaskStatus, DailyRecord, User, SubtaskStatus, ToastMessage } from '../types';
 import { getLocalDateKey, getTaskHistoryDateKey, getTaskTerminalTimestamp } from '../lib/date';
 import { BridgeTaskPayload, pushTaskFromWeb, setIslandVisibility } from '../lib/islandBridge';
 import { loadCloudSnapshot, saveCloudSnapshot } from '../lib/taskRepository';
@@ -118,6 +118,7 @@ function buildBridgePayload(task: Task, statusOverride?: TaskStatus, focusedOver
 interface AppState {
   tasks: Task[];
   history: DailyRecord[];
+  reportGenerationCountByUserAndDate: Record<string, number>;
   closedSyncIds: Record<string, 'done' | 'cancelled'>;
   lastTaskSyncAtById: Record<string, number>;
   localStatusLockBySyncId: Record<string, { status: TaskStatus; until: number }>;
@@ -127,6 +128,8 @@ interface AppState {
   user: User | null;
   isLoggedIn: boolean;
   isIslandVisible: boolean;
+  isLoginModalOpen: boolean;
+  toast: ToastMessage | null;
   addTask: (
     title: string,
     durationMinutes: number,
@@ -149,6 +152,12 @@ interface AppState {
     user?: User | null,
     options?: { clearDataOnLogout?: boolean }
   ) => void;
+  openLoginModal: () => void;
+  closeLoginModal: () => void;
+  showToast: (message: string) => void;
+  clearToast: () => void;
+  getDailyReportGenerationCount: (date: string, userId?: string | null) => number;
+  incrementDailyReportGenerationCount: (date: string, userId?: string | null) => void;
   hydrateCloudData: (userId: string) => Promise<void>;
   syncCloudData: (options?: { historyOnly?: boolean }) => Promise<void>;
   toggleIsland: () => void;
@@ -215,6 +224,7 @@ export const useStore = create<AppState>()(
     (set, get) => ({
       tasks: [],
       history: [],
+      reportGenerationCountByUserAndDate: {},
       closedSyncIds: {},
       lastTaskSyncAtById: {},
       localStatusLockBySyncId: {},
@@ -224,6 +234,8 @@ export const useStore = create<AppState>()(
       user: null,
       isLoggedIn: false,
       isIslandVisible: false,
+      isLoginModalOpen: false,
+      toast: null,
 
       addTask: (title, durationMinutes, subtaskTitles, options) => set((state) => {
         const normalizedStatus = options?.status ?? 'running';
@@ -798,9 +810,44 @@ export const useStore = create<AppState>()(
           closedSyncIds: shouldClearData ? {} : state.closedSyncIds,
           lastTaskSyncAtById: shouldClearData ? {} : state.lastTaskSyncAtById,
           lastFocusSyncAt: shouldClearData ? 0 : state.lastFocusSyncAt,
-          lastBridgeSyncAt: shouldClearData ? 0 : state.lastBridgeSyncAt
+          lastBridgeSyncAt: shouldClearData ? 0 : state.lastBridgeSyncAt,
+          isLoginModalOpen: false
         }));
       },
+
+      openLoginModal: () => set({ isLoginModalOpen: true }),
+
+      closeLoginModal: () => set({ isLoginModalOpen: false }),
+
+      showToast: (message) =>
+        set(() => ({
+          toast: {
+            id: Date.now(),
+            message
+          }
+        })),
+
+      clearToast: () => set({ toast: null }),
+
+      getDailyReportGenerationCount: (date, userId) => {
+        const normalizedUserId = userId?.trim();
+        if (!normalizedUserId) return 0;
+        const key = `${normalizedUserId}:${date}`;
+        return get().reportGenerationCountByUserAndDate[key] || 0;
+      },
+
+      incrementDailyReportGenerationCount: (date, userId) =>
+        set((state) => {
+          const normalizedUserId = userId?.trim();
+          if (!normalizedUserId) return state;
+          const key = `${normalizedUserId}:${date}`;
+          return {
+            reportGenerationCountByUserAndDate: {
+              ...state.reportGenerationCountByUserAndDate,
+              [key]: (state.reportGenerationCountByUserAndDate[key] || 0) + 1
+            }
+          };
+        }),
 
       hydrateCloudData: async (userId) => {
         const snapshot = await loadCloudSnapshot(userId);
@@ -836,7 +883,11 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'clawdmate-storage-prod',
-      storage: getGuestStorage()
+      storage: getGuestStorage(),
+      partialize: (state) => {
+        const { isLoginModalOpen, toast, ...rest } = state;
+        return rest;
+      }
     }
   )
 );

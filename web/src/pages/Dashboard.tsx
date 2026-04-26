@@ -1,11 +1,13 @@
-﻿/**
+/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { getLocalDateKey } from '../lib/date';
+import { getDailyReportEligibility } from '../lib/dailyReportGeneration';
 import { normalizeHistorySubtasks } from '../lib/history';
 import { getTaskActualDurationSeconds } from '../lib/taskTime';
 import { Plus, Play, Pause, CheckCircle2, X, ChevronRight, SkipForward, Menu } from 'lucide-react';
@@ -48,7 +50,24 @@ function normalizeSubtasks(input: unknown): DashboardSubtask[] {
 }
 
 export default function Dashboard() {
-  const { tasks, activeTaskId, addTask, completeTask, cancelTask, toggleSubtask, skipSubtask, history, addTimeToTask, setActiveTask } = useStore();
+  const navigate = useNavigate();
+  const {
+    tasks,
+    activeTaskId,
+    addTask,
+    completeTask,
+    cancelTask,
+    toggleSubtask,
+    skipSubtask,
+    history,
+    addTimeToTask,
+    setActiveTask,
+    isLoggedIn,
+    user,
+    getDailyReportGenerationCount,
+    openLoginModal,
+    showToast
+  } = useStore();
   const [taskTitle, setTaskTitle] = useState('');
   const [duration, setDuration] = useState(30);
   const [mode, setMode] = useState<'minimal' | 'structured'>('minimal');
@@ -162,6 +181,26 @@ export default function Dashboard() {
   const completedCount = todayHistory.filter(t => t.status === 'done').length;
   const cancelledCount = todayHistory.filter(t => t.status === 'cancelled').length;
   const totalFocusTime = todayHistory.reduce((acc, t) => acc + (t.status === 'done' ? getTaskActualDurationSeconds(t) : 0), 0);
+  const todayRecord = history.find(h => h.date === today);
+
+  const handleOpenDailyReport = () => {
+    const eligibility = getDailyReportEligibility({
+      record: todayRecord,
+      isLoggedIn,
+      userId: user?.id,
+      generationCount: getDailyReportGenerationCount(today, user?.id)
+    });
+
+    if (!eligibility.ok) {
+      showToast(eligibility.message);
+      if (eligibility.reason === 'login_required') {
+        openLoginModal();
+      }
+      return;
+    }
+
+    navigate(`/app/report?date=${today}&autogen=1`);
+  };
 
   return (
     <div className="flex-1 flex overflow-hidden h-screen bg-main-bg">
@@ -769,7 +808,11 @@ export default function Dashboard() {
         </section>
 
         <section className="mt-auto">
-          <button className="w-full bg-soft-apricot text-ink py-4 rounded-[18px] font-bold text-sm shadow-sm hover:opacity-90 transition-all font-display flex items-center justify-center gap-2 border border-soft-apricot/20">
+          <button
+            type="button"
+            onClick={handleOpenDailyReport}
+            className="w-full bg-soft-apricot text-ink py-4 rounded-[18px] font-bold text-sm shadow-sm hover:opacity-90 transition-all font-display flex items-center justify-center gap-2 border border-soft-apricot/20"
+          >
             <span className="material-symbols-outlined text-lg">description</span>
             生成日报
           </button>
@@ -778,5 +821,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-

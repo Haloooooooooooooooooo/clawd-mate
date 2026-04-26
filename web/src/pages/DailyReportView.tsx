@@ -4,8 +4,10 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { getLocalDateKey } from '../lib/date';
+import { getDailyReportEligibility } from '../lib/dailyReportGeneration';
 import { Download, Share2, Calendar, FileImage } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -27,10 +29,86 @@ function getPromptStorageKey(date: string) {
   return `${REPORT_PROMPT_STORAGE_PREFIX}${date}`;
 }
 
+function normalizeGenerateError(error: unknown) {
+  const rawMessage = error instanceof Error ? error.message : String(error ?? '');
+
+  if (!rawMessage.trim()) {
+    return '生成日报图片失败了，请稍后再试。';
+  }
+
+  if (rawMessage.includes('没有读取到图片 API Key')) {
+    return '还没有读取到生图密钥。请检查 `.env.local` 里的 `VORTEXAI_API_KEY` 是否已配置，然后重启应用。';
+  }
+
+  if (rawMessage.includes('API Key 无效') || rawMessage.includes('已过期')) {
+    return '生图密钥不可用。请更换新的 `VORTEXAI_API_KEY` 后再试。';
+  }
+
+  if (rawMessage.includes('太频繁') || rawMessage.includes('额度不足')) {
+    return '图片服务当前请求过多，或者账户额度不足。可以稍后再试。';
+  }
+
+  if (rawMessage.includes('超时')) {
+    return '这次生成超时了。可以直接再点一次“一键生成日报”。';
+  }
+
+  if (rawMessage.includes('连接图片服务失败')) {
+    return '暂时连不上图片服务。请检查网络，或者确认 `VORTEXAI_API_HOST` 是否正确。';
+  }
+
+  if (rawMessage.includes('图片服务暂时不可用')) {
+    return '图片服务暂时不稳定，等一会儿再试会更稳。';
+  }
+
+  if (rawMessage.includes('当前环境不支持桌面端生图调用')) {
+    return '当前这个运行环境不能直接调桌面端生图。请在 Tauri 桌面应用里点击生成日报。';
+  }
+
+  if (rawMessage.includes('Cannot read properties of undefined') && rawMessage.includes('invoke')) {
+    return '当前这个运行环境还没有连上桌面端生图能力。请重启 Tauri 应用后再试。';
+  }
+
+  return rawMessage;
+}
+
+async function invokeGenerateDailyReportImage(prompt: string) {
+  const tauriInvoke =
+    (globalThis as { __TAURI__?: { core?: { invoke?: <T>(command: string, args?: unknown) => Promise<T> } } })
+      .__TAURI__?.core?.invoke;
+
+  if (typeof tauriInvoke === 'function') {
+    return tauriInvoke<string>('generate_daily_report_image', { prompt });
+  }
+
+  try {
+    const tauriCore = await import('@tauri-apps/api/core');
+    if (typeof tauriCore.invoke === 'function') {
+      return tauriCore.invoke<string>('generate_daily_report_image', { prompt });
+    }
+  } catch {
+    // Ignore and fall through to the explicit error below.
+  }
+
+  throw new Error('当前环境不支持桌面端生图调用，请在 Tauri 桌面应用里使用日报生成。');
+}
+
 export default function DailyReportView() {
-  const { history } = useStore();
-  const [selectedDate, setSelectedDate] = useState(getLocalDateKey(new Date()));
+  const [searchParams, setSearchParams] = useSearchParams();
+  const {
+    history,
+    isLoggedIn,
+    user,
+    openLoginModal,
+    showToast,
+    getDailyReportGenerationCount,
+    incrementDailyReportGenerationCount
+  } = useStore();
+
+  const generationDateKey = getLocalDateKey(new Date());
+  const [selectedDate, setSelectedDate] = useState(searchParams.get('date') || getLocalDateKey(new Date()));
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
 
   const selectedRecord = history.find((record) => record.date === selectedDate);
   const dailyImageSummary = buildDailySummaryForImage(selectedRecord);
@@ -41,22 +119,60 @@ export default function DailyReportView() {
   useEffect(() => {
     const storedImage = localStorage.getItem(getImageStorageKey(selectedDate));
     setGeneratedImageUrl(storedImage && storedImage.trim().length > 0 ? storedImage : null);
+    setGenerateError(null);
   }, [selectedDate]);
 
-  const handleGenerateReport = () => {
+  useEffect(() => {
+    const dateFromQuery = searchParams.get('date');
+    if (dateFromQuery && dateFromQuery !== selectedDate) {
+      setSelectedDate(dateFromQuery);
+    }
+  }, [searchParams, selectedDate]);
+
+  const handleGenerateReport = async () => {
+    const eligibility = getDailyReportEligibility({
+      record: selectedRecord,
+      isLoggedIn,
+      userId: user?.id,
+      generationCount: getDailyReportGenerationCount(generationDateKey, user?.id)
+    });
+
+    if (!eligibility.ok) {
+      setGenerateError(eligibility.message);
+      showToast(eligibility.message);
+      if (eligibility.reason === 'login_required') {
+        openLoginModal();
+      }
+      return;
+    }
+
+    setIsGenerating(true);
+    setGenerateError(null);
     localStorage.setItem(getPromptStorageKey(selectedDate), dailyImagePromptPayload);
-    window.dispatchEvent(
-      new CustomEvent('clawdmate:daily-report-generate-request', {
-        detail: {
-          date: selectedDate,
-          prompt: dailyImagePrompt,
-          promptPayload: dailyImagePromptPayload,
-          promptData: dailyImagePromptData,
-          summary: dailyImageSummary
-        }
-      })
-    );
+
+    try {
+      const imageDataUrl = await invokeGenerateDailyReportImage(dailyImagePrompt);
+      localStorage.setItem(getImageStorageKey(selectedDate), imageDataUrl);
+      setGeneratedImageUrl(imageDataUrl);
+      incrementDailyReportGenerationCount(generationDateKey, user?.id);
+    } catch (error) {
+      setGenerateError(normalizeGenerateError(error));
+    } finally {
+      setIsGenerating(false);
+    }
   };
+
+  useEffect(() => {
+    if (searchParams.get('autogen') !== '1') return;
+    const requestedDate = searchParams.get('date');
+    if (requestedDate && requestedDate !== selectedDate) return;
+
+    void handleGenerateReport().finally(() => {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('autogen');
+      setSearchParams(nextParams, { replace: true });
+    });
+  }, [searchParams, setSearchParams, selectedDate]);
 
   const handleDownloadReport = () => {
     if (!generatedImageUrl) return;
@@ -67,8 +183,8 @@ export default function DailyReportView() {
   };
 
   return (
-    <div className="px-8 py-8 space-y-8 max-w-7xl mx-auto">
-      <header className="flex justify-between items-end border-b border-border-main pb-6">
+    <div className="h-[100dvh] overflow-hidden px-6 py-5 max-w-7xl mx-auto flex flex-col gap-5">
+      <header className="flex justify-between items-end border-b border-border-main pb-4 shrink-0">
         <div className="space-y-1">
           <h3 className="font-display text-4xl text-ink font-bold leading-tight">每日复盘</h3>
         </div>
@@ -92,18 +208,14 @@ export default function DailyReportView() {
         </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-        <div className="lg:col-span-2">
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+        <div className="lg:col-span-2 min-h-0">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white border border-border-main rounded-[32px] p-8 shadow-sm paper-texture relative overflow-hidden min-h-[760px]"
+            className="bg-white border border-border-main rounded-[32px] p-5 md:p-6 shadow-sm paper-texture relative overflow-hidden h-full"
           >
-            <div className="absolute top-0 right-0 p-6 opacity-10">
-              <FileImage size={120} className="text-primary" />
-            </div>
-
-            <div className="relative z-10 h-full flex flex-col gap-8">
+            <div className="relative z-10 flex flex-col gap-4 h-full min-h-0">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-orange-50 rounded-2xl border border-primary/10">
                   <Calendar size={20} className="text-primary-accent" />
@@ -114,40 +226,50 @@ export default function DailyReportView() {
                 </div>
               </div>
 
-              <div className="flex-1 rounded-[28px] border border-dashed border-border-main/60 bg-[#FFFDF9] flex items-center justify-center overflow-hidden">
-                {generatedImageUrl ? (
-                  <img
-                    src={generatedImageUrl}
-                    alt={`Daily report for ${selectedDate}`}
-                    className="w-full h-full object-contain"
-                  />
-                ) : (
-                  <div className="w-full h-full min-h-[560px] flex flex-col items-center justify-center gap-6 px-10 text-center">
-                    <div className="w-20 h-20 rounded-[20px] border border-border-main bg-white flex items-center justify-center shadow-sm">
-                      <FileImage size={32} className="text-primary-accent" />
-                    </div>
-                    <div className="space-y-2">
-                      <p className="text-lg font-bold text-ink">还没有生成日报图片</p>
-                      <p className="text-sm text-stone-400 max-w-md">
-                        点击下方按钮后，会把当天记录整理成生图提示词并发出生成请求。等图片写回本地后，这里会自动展示。
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleGenerateReport}
-                      className="px-6 py-3 rounded-[16px] bg-primary text-white font-bold shadow-lg shadow-primary/20 hover:opacity-90 transition-all"
-                    >
-                      一键生成日报
-                    </button>
+              <div className="flex-1 min-h-0 flex justify-center items-start">
+                <div className="h-full max-h-full max-w-full aspect-[4/5]">
+                  <div className="h-full w-full rounded-[24px] border border-dashed border-border-main/60 bg-[#FFFDF9] flex items-center justify-center overflow-hidden">
+                    {generatedImageUrl ? (
+                      <img
+                        src={generatedImageUrl}
+                        alt={`Daily report for ${selectedDate}`}
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center gap-6 px-8 md:px-12 text-center">
+                        <div className="w-20 h-20 rounded-[20px] border border-border-main bg-white flex items-center justify-center shadow-sm">
+                          <FileImage size={32} className="text-primary-accent" />
+                        </div>
+                        <div className="space-y-2">
+                          <p className="text-lg font-bold text-ink">还没有生成日报图片</p>
+                          <p className="text-sm text-stone-400 max-w-md">
+                            点击下方按钮后，会把当天记录整理成生图提示词并请求生成。生成成功后，图片会自动显示在这里。
+                          </p>
+                          {generateError && (
+                            <p className="text-sm text-red-500 max-w-md">{generateError}</p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleGenerateReport();
+                          }}
+                          disabled={isGenerating}
+                          className="px-6 py-3 rounded-[16px] bg-primary text-white font-bold shadow-lg shadow-primary/20 hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {isGenerating ? '生成中...' : '一键生成日报'}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             </div>
           </motion.div>
         </div>
 
-        <div className="space-y-6">
-          <div className="bg-paper-mist/30 border border-border-main rounded-[24px] p-6 space-y-4">
+        <div className="space-y-6 min-h-0">
+          <div className="bg-paper-mist/30 border border-border-main rounded-[24px] p-5 space-y-4 max-h-full overflow-auto">
             <h4 className="text-xs font-bold text-ink uppercase tracking-widest px-2">历史日报存档</h4>
             <div className="space-y-2">
               {history.length > 0 ? (
@@ -155,7 +277,13 @@ export default function DailyReportView() {
                   <button
                     key={record.date}
                     type="button"
-                    onClick={() => setSelectedDate(record.date)}
+                    onClick={() => {
+                      setSelectedDate(record.date);
+                      const nextParams = new URLSearchParams(searchParams);
+                      nextParams.set('date', record.date);
+                      nextParams.delete('autogen');
+                      setSearchParams(nextParams, { replace: true });
+                    }}
                     className={cn(
                       'w-full flex items-center justify-between p-3 rounded-xl transition-all border text-sm font-bold',
                       selectedDate === record.date

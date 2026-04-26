@@ -69,3 +69,8 @@ export interface User {
   email: string;
   avatar: string; // Initials or URL
 }
+
+export interface ToastMessage {
+  id: number;
+  message: string;
+}
