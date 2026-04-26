@@ -5,6 +5,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
+import { getLocalDateKey } from '../lib/date';
+import { normalizeHistorySubtasks } from '../lib/history';
+import { getTaskActualDurationSeconds } from '../lib/taskTime';
 import { Plus, Play, Pause, CheckCircle2, X, ChevronRight, SkipForward, Menu } from 'lucide-react';
 import { cn, formatTime } from '../lib/utils';
 import { motion } from 'motion/react';
@@ -144,7 +147,7 @@ export default function Dashboard() {
   };
 
   // Today's Stats
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateKey(new Date());
   const todayHistory = history.find(h => h.date === today)?.tasks || [];
 
   // Auto-scroll to newly added history
@@ -158,7 +161,7 @@ export default function Dashboard() {
   }, [todayHistory.length, highlightTaskId]);
   const completedCount = todayHistory.filter(t => t.status === 'done').length;
   const cancelledCount = todayHistory.filter(t => t.status === 'cancelled').length;
-  const totalFocusTime = todayHistory.reduce((acc, t) => acc + (t.status === 'done' ? t.totalDuration : 0), 0);
+  const totalFocusTime = todayHistory.reduce((acc, t) => acc + (t.status === 'done' ? getTaskActualDurationSeconds(t) : 0), 0);
 
   return (
     <div className="flex-1 flex overflow-hidden h-screen bg-main-bg">
@@ -664,9 +667,9 @@ export default function Dashboard() {
           <div className="space-y-2.5 overflow-y-auto pr-1 scrollbar-hide" ref={historyListRef}>
             {todayHistory.length === 0 && <p className="text-stone-400 text-[10px] italic opacity-60">暂无今日记录</p>}
             {todayHistory.map((h) => {
-              const timeSpent = h.totalDuration - h.remainingTime;
+              const timeSpent = getTaskActualDurationSeconds(h);
               const isHighlighted = highlightTaskId === h.id;
-              const historySubtasks = normalizeSubtasks(h.subtasks);
+              const historySubtasks = normalizeHistorySubtasks(h);
               
               return (
                 <motion.div 
@@ -721,12 +724,37 @@ export default function Dashboard() {
                       {historySubtasks.slice(0, 3).map((st, idx) => (
                         <li key={st.id} className="flex items-center gap-2 text-[11px] font-medium text-stone-500">
                           <span className="text-stone-300 font-mono text-[10px]">{idx + 1}.</span>
+                          <div
+                            className={cn(
+                              'w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0',
+                              st.displayStatus === 'done' && 'border-[#B9D7B7] bg-[#E8F4DE]',
+                              st.displayStatus === 'skipped' && 'border-[#F1BAAA] bg-[#FFE7DE]',
+                              st.displayStatus === 'pending' && 'border-stone-300 bg-transparent'
+                            )}
+                          >
+                            {st.displayStatus === 'done' && <CheckCircle2 size={10} className="text-[#3E8A45]" />}
+                            {st.displayStatus === 'skipped' && <X size={10} className="text-[#D84A30]" />}
+                          </div>
                           <span className={cn(
-                            "truncate",
-                            st.status === 'done' ? "text-[#3E8A45]" : st.status === 'skipped' && "text-stone-300 italic"
+                            'truncate flex-1',
+                            st.displayStatus === 'done'
+                              ? 'text-[#3E8A45]'
+                              : st.displayStatus === 'skipped'
+                              ? 'text-stone-500'
+                              : 'text-stone-500'
                           )}>
                             {st.title}
                           </span>
+                          {st.displayLabel && (
+                            <span
+                              className={cn(
+                                'shrink-0 text-[10px] font-bold',
+                                st.displayStatus === 'done' ? 'text-[#3E8A45]' : 'text-[#D84A30]'
+                              )}
+                            >
+                              {st.displayLabel}
+                            </span>
+                          )}
                         </li>
                       ))}
                       {historySubtasks.length > 3 && (

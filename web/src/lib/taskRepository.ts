@@ -1,4 +1,5 @@
 import { DailyRecord, Subtask, Task } from '../types';
+import { getTaskHistoryDateKey, getTaskTerminalTimestamp } from './date';
 import { supabase } from './supabase';
 
 type DbHistoryRow = {
@@ -14,14 +15,17 @@ type DbHistoryRow = {
 function groupHistoryByDate(tasks: Task[]): DailyRecord[] {
   const byDate = new Map<string, Task[]>();
   tasks.forEach((task) => {
-    const date = new Date(task.createdAt).toISOString().split('T')[0];
+    const date = getTaskHistoryDateKey(task);
     const list = byDate.get(date) || [];
     list.push(task);
     byDate.set(date, list);
   });
   return Array.from(byDate.entries())
     .sort((a, b) => (a[0] > b[0] ? -1 : 1))
-    .map(([date, groupedTasks]) => ({ date, tasks: groupedTasks }));
+    .map(([date, groupedTasks]) => ({
+      date,
+      tasks: groupedTasks.sort((a, b) => getTaskTerminalTimestamp(a) - getTaskTerminalTimestamp(b))
+    }));
 }
 
 export async function loadCloudSnapshot(userId: string): Promise<{ tasks: Task[]; history: DailyRecord[] }> {
@@ -29,7 +33,7 @@ export async function loadCloudSnapshot(userId: string): Promise<{ tasks: Task[]
     .from('task_history')
     .select('id,title,status,total_duration_seconds,actual_duration_seconds,payload,created_at')
     .eq('user_id', userId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: true });
 
   if (historyError) throw historyError;
 
@@ -97,7 +101,7 @@ export async function saveCloudSnapshot(
         payload: {
           subtasks: task.subtasks
         },
-        created_at: new Date(task.createdAt).toISOString()
+        created_at: new Date(task.endTime ?? task.createdAt).toISOString()
       }))
   );
 

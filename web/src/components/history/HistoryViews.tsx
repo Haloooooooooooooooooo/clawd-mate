@@ -10,6 +10,8 @@ import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { DailyRecord } from '../../types';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from 'date-fns';
+import { normalizeHistorySubtasks } from '../../lib/history';
+import { formatDurationMinutes, getTaskActualDurationSeconds } from '../../lib/taskTime';
 
 interface DetailModalProps {
   record: DailyRecord | null;
@@ -21,7 +23,7 @@ export function DetailModal({ record, onClose }: DetailModalProps) {
 
   const completedTasks = record.tasks.filter(t => t.status === 'done');
   const cancelledTasks = record.tasks.filter(t => t.status === 'cancelled');
-  const totalDuration = record.tasks.reduce((acc, t) => acc + (t.status === 'done' ? t.totalDuration : 0), 0);
+  const totalDuration = record.tasks.reduce((acc, t) => acc + (t.status === 'done' ? getTaskActualDurationSeconds(t) : 0), 0);
 
   return (
     <AnimatePresence>
@@ -67,18 +69,36 @@ export function DetailModal({ record, onClose }: DetailModalProps) {
                       </div>
                       <div>
                         <h4 className="font-bold text-ink text-sm">{task.title}</h4>
-                        <p className="text-[9px] font-bold text-stone-500">{Math.floor(task.totalDuration / 60)} min - {new Date(task.createdAt).toLocaleTimeString()}</p>
+                        <p className="text-[9px] font-bold text-stone-500">{formatDurationMinutes(task)} min - {new Date(task.createdAt).toLocaleTimeString()}</p>
                       </div>
                     </div>
                   </div>
                   {task.subtasks.length > 0 && (
                     <div className="pl-10 space-y-1">
-                      {task.subtasks.map(s => (
+                      {normalizeHistorySubtasks(task).map((s) => (
                         <div key={s.id} className="flex items-center gap-3 text-xs">
-                          <div className={cn('w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0', s.status === 'done' ? 'border-muted-leaf bg-sage' : 'border-stone-300')}>
-                            {s.status === 'done' && <Check size={10} className="text-muted-leaf" />}
+                          <div
+                            className={cn(
+                              'w-4 h-4 rounded-[4px] border flex items-center justify-center shrink-0',
+                              s.displayStatus === 'done' && 'border-[#B9D7B7] bg-[#E8F4DE]',
+                              s.displayStatus === 'skipped' && 'border-[#F1BAAA] bg-[#FFE7DE]',
+                              s.displayStatus === 'pending' && 'border-stone-300 bg-transparent'
+                            )}
+                          >
+                            {s.displayStatus === 'done' && <Check size={10} className="text-[#3E8A45]" />}
+                            {s.displayStatus === 'skipped' && <X size={10} className="text-[#D84A30]" />}
                           </div>
-                          <span className={cn(s.status === 'done' ? 'text-stone-500' : 'text-stone-700 font-medium')}>{s.title}</span>
+                          <span className={cn('flex-1', s.displayStatus === 'done' ? 'text-stone-500' : s.displayStatus === 'skipped' ? 'text-stone-500' : 'text-stone-700 font-medium')}>{s.title}</span>
+                          {s.displayLabel && (
+                            <span
+                              className={cn(
+                                'shrink-0 text-[10px] font-bold',
+                                s.displayStatus === 'done' ? 'text-[#3E8A45]' : 'text-[#D84A30]'
+                              )}
+                            >
+                              {s.displayLabel}
+                            </span>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -201,7 +221,7 @@ export function HistoryCardView() {
                 <div className="grid grid-cols-3 gap-2 mb-4 bg-[#FFF8EC] p-2.5 rounded-[4px] border-2 border-border-main">
                   <div className="text-center border-r border-border-main/50"><p className="text-[7px] uppercase font-bold text-muted-text">已完成</p><p className="text-[34px] leading-none font-display font-bold text-olive">{record.tasks.filter(t => t.status === 'done').length}</p></div>
                   <div className="text-center border-r border-border-main/50"><p className="text-[7px] uppercase font-bold text-muted-text">已取消</p><p className="text-[34px] leading-none font-display font-bold text-primary">{record.tasks.filter(t => t.status === 'cancelled').length}</p></div>
-                  <div className="text-center"><p className="text-[7px] uppercase font-bold text-muted-text">时长</p><p className="text-[34px] leading-none font-display font-bold text-ink">{Math.floor(record.tasks.reduce((a, t) => a + (t.status === 'done' ? t.totalDuration : 0), 0) / 3600)}h</p></div>
+                  <div className="text-center"><p className="text-[7px] uppercase font-bold text-muted-text">时长</p><p className="text-[34px] leading-none font-display font-bold text-ink">{Math.floor(record.tasks.reduce((a, t) => a + (t.status === 'done' ? getTaskActualDurationSeconds(t) : 0), 0) / 3600)}h</p></div>
                 </div>
 
                 <div className="flex-1 overflow-hidden">
@@ -212,7 +232,7 @@ export function HistoryCardView() {
                           {task.status === 'done' ? <CheckCircle2 size={14} className="text-muted-leaf shrink-0" /> : <X size={14} className="text-red-500 shrink-0" />}
                           <span className={cn('font-medium truncate', task.status === 'done' && 'text-stone-400 font-normal')}>{task.title}</span>
                         </div>
-                        <span className="text-[8px] font-bold text-stone-500 shrink-0">{Math.floor(task.totalDuration / 60)}m</span>
+                        <span className="text-[8px] font-bold text-stone-500 shrink-0">{formatDurationMinutes(task)}m</span>
                       </li>
                     ))}
                     {record.tasks.length > 3 && <li className="text-stone-500 text-center italic text-[9px] pt-1 leading-none">... 还有 {record.tasks.length - 3} 个任务</li>}

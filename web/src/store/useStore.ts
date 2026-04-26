@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { Task, TaskStatus, DailyRecord, User, SubtaskStatus } from '../types';
+import { getLocalDateKey, getTaskHistoryDateKey, getTaskTerminalTimestamp } from '../lib/date';
 import { BridgeTaskPayload, pushTaskFromWeb, setIslandVisibility } from '../lib/islandBridge';
 import { loadCloudSnapshot, saveCloudSnapshot } from '../lib/taskRepository';
 
@@ -44,13 +45,14 @@ function mapBridgeSubtaskStatusToWeb(status?: string): SubtaskStatus {
 }
 
 function appendHistory(history: DailyRecord[], task: Task): DailyRecord[] {
-  const today = new Date().toISOString().split('T')[0];
+  const historyDate = getTaskHistoryDateKey(task);
   const nextHistory = [...history];
-  const dayRecord = nextHistory.find((item) => item.date === today);
+  const dayRecord = nextHistory.find((item) => item.date === historyDate);
   if (dayRecord) {
     dayRecord.tasks.push(task);
+    dayRecord.tasks.sort((a, b) => getTaskTerminalTimestamp(a) - getTaskTerminalTimestamp(b));
   } else {
-    nextHistory.unshift({ date: today, tasks: [task] });
+    nextHistory.unshift({ date: historyDate, tasks: [task] });
   }
   return nextHistory;
 }
@@ -194,7 +196,7 @@ function mergeHistoryRecords(localHistory: DailyRecord[], cloudHistory: DailyRec
 
   const grouped = new Map<string, Task[]>();
   Array.from(unique.values()).forEach((task) => {
-    const date = new Date(task.createdAt).toISOString().split('T')[0];
+    const date = getTaskHistoryDateKey(task);
     const list = grouped.get(date) || [];
     list.push(task);
     grouped.set(date, list);
@@ -202,7 +204,10 @@ function mergeHistoryRecords(localHistory: DailyRecord[], cloudHistory: DailyRec
 
   return Array.from(grouped.entries())
     .sort((a, b) => (a[0] > b[0] ? -1 : 1))
-    .map(([date, tasks]) => ({ date, tasks }));
+    .map(([date, tasks]) => ({
+      date,
+      tasks: tasks.sort((a, b) => getTaskTerminalTimestamp(a) - getTaskTerminalTimestamp(b))
+    }));
 }
 
 export const useStore = create<AppState>()(
@@ -772,7 +777,7 @@ export const useStore = create<AppState>()(
 
       clearTodayHistory: () =>
         set((state) => {
-          const today = new Date().toISOString().split('T')[0];
+          const today = getLocalDateKey(new Date());
           const nextState = {
             history: state.history.filter((record) => record.date !== today)
           };

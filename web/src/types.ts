@@ -30,6 +30,39 @@ export interface DailyRecord {
   tasks: Task[];
 }
 
+export interface DailySummaryTimelineItem {
+  title: string;
+  status: 'done' | 'cancelled';
+  finishedAt: string;
+  actualMinutes: number;
+}
+
+export interface DailySummaryForImage {
+  date: string;
+  overview: {
+    completedCount: number;
+    cancelledCount: number;
+    totalFocusMinutes: number;
+  };
+  timeline: DailySummaryTimelineItem[];
+}
+
+export interface DailyImageTaskInput {
+  time: string;
+  status: 'completed' | 'cancelled';
+  title: string;
+  duration: number;
+}
+
+export interface DailyImagePromptData {
+  date: string;
+  completed_count: number;
+  cancelled_count: number;
+  focus_time: number;
+  tasks: DailyImageTaskInput[];
+  summary_text: string;
+}
+
 export interface User {
   id?: string;
   name: string;
