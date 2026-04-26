@@ -112,9 +112,9 @@ export default function Sidebar() {
   }, [hydrateCloudData, setLoggedIn, syncCloudData]);
 
   const navItems = [
-    { name: '今日任务', path: '/dashboard', icon: LayoutDashboard },
-    { name: '历史记录', path: '/history', icon: History },
-    { name: '生成日报', path: '/report', icon: FileText },
+    { name: '今日任务', path: '/app/dashboard', icon: LayoutDashboard },
+    { name: '历史记录', path: '/app/history', icon: History },
+    { name: '生成日报', path: '/app/report', icon: FileText },
   ];
 
   const handleOpenLogin = () => {

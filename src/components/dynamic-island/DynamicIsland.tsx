@@ -1,7 +1,6 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTaskStore } from '../../stores/taskStore';
-import { useTimer } from '../../hooks/useTimer';
 import { useReminder } from '../../hooks/useReminder';
 import { pushTaskFromIsland } from '../../lib/islandBridge';
 import type { Task } from '../../types/task';
@@ -86,20 +85,16 @@ export function DynamicIsland({
     });
   };
 
-  const timer = useTimer({
-    plannedDuration: activeTask?.plannedDuration || 25,
-    initialElapsed: activeTask?.actualDuration || 0,
-    syncKey: activeTaskId,
-    onTick: (elapsed) => {
-      if (activeTaskId) {
-        updateTask(activeTaskId, { actualDuration: elapsed });
-      }
-    }
-  });
+  const activeElapsedSeconds = activeTask?.actualDuration || 0;
+  const activePlannedSeconds = (activeTask?.plannedDuration || 25) * 60;
+  const activeRemainingSeconds = Math.max(0, activePlannedSeconds - activeElapsedSeconds);
+  const activeProgress = activePlannedSeconds > 0 ? activeElapsedSeconds / activePlannedSeconds : 0;
+  const activeIsOvertime = activeElapsedSeconds >= activePlannedSeconds && activeElapsedSeconds > 0;
+  const activeIsRunning = activeTask?.status === 'active';
 
   const reminder = useReminder(
-    timer.elapsedSeconds,
-    (activeTask?.plannedDuration || 25) * 60,
+    activeElapsedSeconds,
+    activePlannedSeconds,
     {
       onHalfTime: () => {
         console.log('Half time reached');
@@ -113,24 +108,19 @@ export function DynamicIsland({
     }
   );
 
+  // Use one unified ticking source for all active tasks (main + parallel).
   useEffect(() => {
-    if (activeTask && activeTask.status === 'active') {
-      timer.start();
-    } else {
-      timer.pause();
-    }
-  }, [activeTask?.id, activeTask?.status]);
-
-  // Keep parallel running tasks progressing even when they are not the focused main task.
-  useEffect(() => {
+    let lastTickAt = Date.now();
     const interval = window.setInterval(() => {
-      const store = useTaskStore.getState();
-      const runningParallelTasks = store.tasks.filter(
-        (task) => task.id !== store.activeTaskId && task.status === 'active'
-      );
+      const now = Date.now();
+      const deltaSeconds = Math.max(1, Math.floor((now - lastTickAt) / 1000));
+      lastTickAt = now;
 
-      runningParallelTasks.forEach((task) => {
-        store.updateTask(task.id, { actualDuration: task.actualDuration + 1 });
+      const store = useTaskStore.getState();
+      const runningTasks = store.tasks.filter((task) => task.status === 'active');
+
+      runningTasks.forEach((task) => {
+        store.updateTask(task.id, { actualDuration: task.actualDuration + deltaSeconds });
       });
     }, 1000);
 
@@ -202,22 +192,18 @@ export function DynamicIsland({
     const currentPlannedMinutes = activeTask?.plannedDuration || 25;
     const currentPlannedSeconds = currentPlannedMinutes * 60;
     const persistedElapsed = activeTask?.actualDuration || 0;
-    const timerElapsed = timer.elapsedSeconds;
 
     // If user extends right after time-up, keep elapsed baseline at least the old planned time.
     const nextElapsedBaseline =
-      timerElapsed >= currentPlannedSeconds
+      persistedElapsed >= currentPlannedSeconds
         ? Math.max(persistedElapsed, currentPlannedSeconds)
-        : Math.max(persistedElapsed, timerElapsed);
+        : persistedElapsed;
 
     updateTask(activeTaskId, {
       plannedDuration: currentPlannedMinutes + minutes,
-      actualDuration: nextElapsedBaseline
+      actualDuration: nextElapsedBaseline,
+      status: 'active'
     });
-    if (!timer.isRunning) {
-      timer.start();
-      updateTask(activeTaskId, { status: 'active' });
-    }
     pushTaskSync(activeTask, {
       plannedDuration: currentPlannedMinutes + minutes,
       actualDuration: nextElapsedBaseline,
@@ -227,11 +213,10 @@ export function DynamicIsland({
   };
 
   const handlePause = () => {
-    timer.pause();
     if (activeTaskId) updateTask(activeTaskId, { status: 'paused' });
     if (activeTask) {
       pushTaskSync(activeTask, {
-        actualDuration: Math.max(activeTask.actualDuration, timer.elapsedSeconds),
+        actualDuration: activeTask.actualDuration,
         status: 'paused',
         focused: true
       });
@@ -239,7 +224,6 @@ export function DynamicIsland({
   };
 
   const handleResume = () => {
-    timer.start();
     if (activeTaskId) updateTask(activeTaskId, { status: 'active' });
     if (activeTask) {
       pushTaskSync(activeTask, { status: 'active', focused: true });
@@ -247,10 +231,9 @@ export function DynamicIsland({
   };
 
   const handleComplete = () => {
-    timer.pause();
     if (!activeTaskId || !activeTask) return;
     pushTaskSync(activeTask, {
-      actualDuration: Math.max(activeTask.actualDuration, timer.elapsedSeconds),
+      actualDuration: activeTask.actualDuration,
       status: 'completed'
     });
     completeTask(activeTaskId);
@@ -270,12 +253,11 @@ export function DynamicIsland({
   const handleSwitchTask = (taskId: string) => {
     const previousTask = activeTaskId ? tasks.find((task) => task.id === activeTaskId) : undefined;
     const targetTask = tasks.find((task) => task.id === taskId);
-    timer.pause();
     setActiveTask(taskId);
     updateTask(taskId, { status: 'active' });
     if (previousTask) {
       pushTaskSync(previousTask, {
-        actualDuration: Math.max(previousTask.actualDuration, timer.elapsedSeconds),
+        actualDuration: previousTask.actualDuration,
         status:
           previousTask.status === 'paused' || previousTask.status === 'completed' || previousTask.status === 'cancelled'
             ? previousTask.status
@@ -359,14 +341,24 @@ export function DynamicIsland({
 
   const handleCancel = () => {
     if (!activeTaskId || !activeTask) return;
-    timer.pause();
     pushTaskSync(activeTask, {
-      actualDuration: Math.max(activeTask.actualDuration, timer.elapsedSeconds),
+      actualDuration: activeTask.actualDuration,
       status: 'cancelled'
     });
     updateTask(activeTaskId, { status: 'cancelled' });
     removeTask(activeTaskId);
-    setActiveTask(null);
+
+    // Keep island flow continuous: switch to next available parallel task.
+    const remainingTasks = tasks.filter(
+      (task) => task.id !== activeTaskId && (task.status === 'active' || task.status === 'paused')
+    );
+    if (remainingTasks.length > 0) {
+      setActiveTask(remainingTasks[0].id);
+      updateTask(remainingTasks[0].id, { status: 'active' });
+      pushTaskSync(remainingTasks[0], { status: 'active', focused: true });
+    } else {
+      setActiveTask(null);
+    }
   };
 
   const handleCloseIsland = async () => {
@@ -500,10 +492,10 @@ export function DynamicIsland({
               key="expanded"
               task={activeTask}
               tasks={activeOrPausedTasks}
-              progress={timer.progress}
-              remainingSeconds={timer.remainingSeconds}
-              isRunning={timer.isRunning}
-              isOvertime={timer.isOvertime}
+              progress={activeProgress}
+              remainingSeconds={activeRemainingSeconds}
+              isRunning={activeIsRunning}
+              isOvertime={activeIsOvertime}
               onPause={handlePause}
               onResume={handleResume}
               onComplete={handleComplete}
@@ -536,11 +528,11 @@ export function DynamicIsland({
             <CollapsedView
               key="collapsed"
               task={activeTask}
-              progress={timer.progress}
-              remainingSeconds={timer.remainingSeconds}
-              isOvertime={timer.isOvertime}
-              isRunning={timer.isRunning}
-              onPause={timer.isRunning ? handlePause : handleResume}
+              progress={activeProgress}
+              remainingSeconds={activeRemainingSeconds}
+              isOvertime={activeIsOvertime}
+              isRunning={activeIsRunning}
+              onPause={activeIsRunning ? handlePause : handleResume}
               onComplete={handleComplete}
               onExtend={handleExtend}
               onCancel={handleCancel}
