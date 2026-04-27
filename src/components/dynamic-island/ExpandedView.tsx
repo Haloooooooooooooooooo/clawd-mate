@@ -97,8 +97,8 @@ export function ExpandedView({
             </button>
           </div>
 
-          <div className="mb-2 rounded-[14px] border border-white/10 bg-white/[0.03] p-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="mb-2 min-h-[136px] rounded-[14px] border border-white/10 bg-white/[0.03] p-2.5">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
               <div className="text-[13px] text-white/75">
                 {isOvertime ? (
                   <span className="text-orange-400">
@@ -114,11 +114,11 @@ export function ExpandedView({
             {/* Action Buttons */}
             {isOvertime ? (
               // 时间结束时的按钮
-              <div className="mt-3 flex gap-2">
+              <div className="mt-2 flex gap-2">
                 <button
                   type="button"
                   onClick={onComplete}
-                  className="flex-[2] rounded-[12px] bg-emerald-500 py-2.5 text-[12px] font-medium text-white transition-colors hover:bg-emerald-400 flex items-center justify-center gap-1.5"
+                  className="flex-[2] rounded-[12px] bg-emerald-500 py-2 text-[12px] font-medium text-white transition-colors hover:bg-emerald-400 flex items-center justify-center gap-1.5"
                 >
                   <CheckCircle2 size={16} />
                   <span>结束任务</span>
@@ -126,7 +126,7 @@ export function ExpandedView({
                 <button
                   type="button"
                   onClick={() => onExtend(5)}
-                  className="flex-1 rounded-[12px] border border-white/10 bg-white/8 py-2.5 text-[12px] text-white/75 transition-colors hover:bg-white/14 flex flex-col items-center justify-center"
+                  className="flex-1 rounded-[12px] border border-white/10 bg-white/8 py-2 text-[12px] text-white/75 transition-colors hover:bg-white/14 flex flex-col items-center justify-center"
                 >
                   <span className="text-base">+5</span>
                   <span className="text-[9px] text-white/50">min</span>
@@ -134,7 +134,7 @@ export function ExpandedView({
                 <button
                   type="button"
                   onClick={() => onExtend(10)}
-                  className="flex-1 rounded-[12px] border border-white/10 bg-white/8 py-2.5 text-[12px] text-white/75 transition-colors hover:bg-white/14 flex flex-col items-center justify-center"
+                  className="flex-1 rounded-[12px] border border-white/10 bg-white/8 py-2 text-[12px] text-white/75 transition-colors hover:bg-white/14 flex flex-col items-center justify-center"
                 >
                   <span className="text-base">+10</span>
                   <span className="text-[9px] text-white/50">min</span>
@@ -185,7 +185,7 @@ export function ExpandedView({
           {otherTasks.length > 0 && (
             <section className="mb-2 rounded-[16px] border border-white/10 bg-white/[0.04] p-3">
               <div className="mb-2 text-[11px] uppercase tracking-[0.16em] text-white/35">Parallel Tasks</div>
-              <div className="space-y-2">
+              <div className="max-h-[236px] space-y-1.5 overflow-y-auto pr-1 custom-scrollbar">
                 {otherTasks.map((parallelTask) => (
                   <ParallelTaskCard
                     key={parallelTask.id}

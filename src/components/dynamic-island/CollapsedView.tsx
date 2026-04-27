@@ -40,7 +40,7 @@ export function CollapsedView({
     <motion.div
       role="button"
       tabIndex={0}
-      className="group relative w-[280px] cursor-pointer"
+      className="group relative w-[392px] cursor-pointer"
       onClick={onExpand}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {

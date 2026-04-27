@@ -500,10 +500,11 @@ export function DynamicIsland({
         ) : (
           <motion.div
             key="collapsed-wrapper"
-            initial={{ width: 320 }}
-            animate={{ width: 320 }}
-            exit={{ width: 320 }}
+            initial={{ width: 392 }}
+            animate={{ width: 392 }}
+            exit={{ width: 392 }}
             transition={{ duration: 0 }}
+            className="flex"
           >
             <CollapsedView
               key="collapsed"

@@ -110,7 +110,6 @@ export function StructuredMode({
           onChange={(event) => setTitle(event.target.value)}
           placeholder="任务名称..."
           className="mb-3 w-full rounded-lg bg-white/10 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/30"
-          autoFocus
         />
 
         <div className="mb-3">
@@ -142,7 +141,6 @@ export function StructuredMode({
                 min={1}
                 max={180}
                 className="w-20 rounded-lg bg-blue-500 px-2 py-1.5 text-center text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/30"
-                autoFocus
               />
             ) : (
               <button

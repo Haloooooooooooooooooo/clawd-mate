@@ -38,8 +38,8 @@ export function ParallelTaskCard({
   const overtimeRemainSeconds = overtimeSeconds % 60;
 
   return (
-    <div className="rounded-[16px] border border-white/10 bg-white/[0.03] px-3 py-3">
-      <div className="mb-2 flex items-center gap-3">
+    <div className="rounded-[14px] border border-white/10 bg-white/[0.03] px-2.5 py-2.5">
+      <div className="mb-1.5 flex items-center gap-2.5">
         <div
           className={`h-2.5 w-2.5 rounded-full ${
             task.status === 'active'
@@ -58,8 +58,8 @@ export function ParallelTaskCard({
         </button>
       </div>
 
-      <ProgressBar progress={progress} className="mb-2 h-1.5" />
-      <div className="mb-2 flex items-center justify-between text-[11px]">
+      <ProgressBar progress={progress} className="mb-1.5 h-1.5" />
+      <div className="mb-1.5 flex items-center justify-between text-[11px]">
         <span className={isOvertime ? 'text-orange-400' : 'text-white/65'}>
           {isOvertime
             ? `超时 ${overtimeMinutes}:${overtimeRemainSeconds.toString().padStart(2, '0')}`
@@ -68,27 +68,27 @@ export function ParallelTaskCard({
         <span className="text-white/45">{elapsedMinutes}/{task.plannedDuration}min</span>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         {isOvertime ? (
           <>
             <button
               type="button"
               onClick={() => onCompleteTask(task.id)}
-              className="rounded-full bg-emerald-500 px-2 py-1 text-[11px] font-medium text-white transition-colors hover:bg-emerald-400"
+              className="rounded-full bg-emerald-500 px-2 py-0.5 text-[11px] font-medium text-white transition-colors hover:bg-emerald-400"
             >
               结束任务
             </button>
             <button
               type="button"
               onClick={() => onExtendTask(task.id, 5)}
-              className="rounded-full border border-white/10 bg-white/8 px-2 py-1 text-[11px] text-white/75 transition-colors hover:bg-white/14"
+              className="rounded-full border border-white/10 bg-white/8 px-2 py-0.5 text-[11px] text-white/75 transition-colors hover:bg-white/14"
             >
               +5min
             </button>
             <button
               type="button"
               onClick={() => onExtendTask(task.id, 10)}
-              className="rounded-full border border-white/10 bg-white/8 px-2 py-1 text-[11px] text-white/75 transition-colors hover:bg-white/14"
+              className="rounded-full border border-white/10 bg-white/8 px-2 py-0.5 text-[11px] text-white/75 transition-colors hover:bg-white/14"
             >
               +10min
             </button>
@@ -98,21 +98,21 @@ export function ParallelTaskCard({
             <button
               type="button"
               onClick={() => onPauseTask(task.id)}
-              className="rounded-full border border-white/10 bg-white/8 px-2 py-1 text-[11px] text-white/75 transition-colors hover:bg-white/14"
+              className="rounded-full border border-white/10 bg-white/8 px-2 py-0.5 text-[11px] text-white/75 transition-colors hover:bg-white/14"
             >
               {isRunning ? '暂停' : '继续'}
             </button>
             <button
               type="button"
               onClick={() => onCompleteTask(task.id)}
-              className="rounded-full bg-emerald-500 px-2 py-1 text-[11px] font-medium text-white transition-colors hover:bg-emerald-400"
+              className="rounded-full bg-emerald-500 px-2 py-0.5 text-[11px] font-medium text-white transition-colors hover:bg-emerald-400"
             >
               完成
             </button>
             <button
               type="button"
               onClick={() => onCancelTask(task.id)}
-              className="rounded-full border border-red-400/30 bg-red-500/10 px-2 py-1 text-[11px] font-medium text-red-300 transition-colors hover:bg-red-500/20"
+              className="rounded-full border border-red-400/30 bg-red-500/10 px-2 py-0.5 text-[11px] font-medium text-red-300 transition-colors hover:bg-red-500/20"
             >
               取消
             </button>
@@ -122,7 +122,7 @@ export function ParallelTaskCard({
           <button
             type="button"
             onClick={() => setExpanded((value) => !value)}
-            className="rounded-full border border-white/10 bg-white/8 px-2 py-1 text-[11px] text-white/75 transition-colors hover:bg-white/14"
+            className="rounded-full border border-white/10 bg-white/8 px-2 py-0.5 text-[11px] text-white/75 transition-colors hover:bg-white/14"
           >
             {expanded ? '收起' : '展开'}
           </button>

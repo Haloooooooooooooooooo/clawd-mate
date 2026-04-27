@@ -44,19 +44,23 @@ function normalizeBridgeSubtasks(
   );
 }
 
-const COLLAPSED_WIDTH = 320;
-const COLLAPSED_HEIGHT = 120;
+const COLLAPSED_WIDTH = 392;
+const COLLAPSED_HEIGHT = 90;
 const EXPANDED_WIDTH = 460;
-const EXPANDED_ISLAND_HEIGHT = 460;
-const COMPOSER_WINDOW_HEIGHT = 700;
+const EXPANDED_ISLAND_HEIGHT = 620;
+const COMPOSER_WINDOW_HEIGHT = 560;
+const STACKED_WINDOW_HEIGHT = 1040;
+const WINDOW_BOTTOM_PADDING = 0;
 
 function App() {
   const [showInput, setShowInput] = useState(false);
   const [expandOnTaskStartKey, setExpandOnTaskStartKey] = useState(0);
   const [layoutMode, setLayoutMode] = useState<'idle' | 'collapsed' | 'expanded'>('idle');
+  const [shellResizeVersion, setShellResizeVersion] = useState(0);
   const lastTaskSyncAtRef = useRef<Record<string, number>>({});
   const lastFocusSyncAtRef = useRef(0);
   const islandShellRef = useRef<HTMLDivElement>(null);
+  const lastAppliedRef = useRef<{ width: number; height: number; x: number; y: number } | null>(null);
   
   const activeTaskId = useTaskStore((state) => state.activeTaskId);
   const addTask = useTaskStore((state) => state.addTask);
@@ -249,6 +253,31 @@ function App() {
   const isIslandExpanded = layoutMode === 'expanded';
   const useExpandedWindow = composerOpen || isIslandExpanded;
 
+  useEffect(() => {
+    if (!islandShellRef.current || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    let rafId = 0;
+    const observer = new ResizeObserver(() => {
+      if (rafId) {
+        window.cancelAnimationFrame(rafId);
+      }
+      rafId = window.requestAnimationFrame(() => {
+        setShellResizeVersion((value) => value + 1);
+      });
+    });
+
+    observer.observe(islandShellRef.current);
+
+    return () => {
+      if (rafId) {
+        window.cancelAnimationFrame(rafId);
+      }
+      observer.disconnect();
+    };
+  }, []);
+
   useLayoutEffect(() => {
     let frameId = 0;
     
@@ -274,20 +303,60 @@ function App() {
         }
 
         const nextWidth = useExpandedWindow ? EXPANDED_WIDTH : COLLAPSED_WIDTH;
-        const nextHeight = composerOpen
-          ? COMPOSER_WINDOW_HEIGHT
-          : isIslandExpanded
-            ? EXPANDED_ISLAND_HEIGHT
-            : COLLAPSED_HEIGHT;
+        const fallbackHeight =
+          composerOpen && isIslandExpanded
+            ? STACKED_WINDOW_HEIGHT
+            : composerOpen
+              ? COMPOSER_WINDOW_HEIGHT
+              : isIslandExpanded
+                ? EXPANDED_ISLAND_HEIGHT
+                : COLLAPSED_HEIGHT;
+
+        const measuredHeight = islandShellRef.current
+          ? Math.ceil(islandShellRef.current.getBoundingClientRect().height + WINDOW_BOTTOM_PADDING)
+          : 0;
+        const nextHeight = useExpandedWindow
+          ? Math.max(COLLAPSED_HEIGHT, measuredHeight || fallbackHeight)
+          : COLLAPSED_HEIGHT;
+
+        const currentPosition = await currentWindow.outerPosition();
+        const currentSize = await currentWindow.outerSize();
+        const nextY = monitor.position.y;
+        const estimatedCenteredX =
+          monitor.position.x + Math.round((monitor.size.width - currentSize.width) / 2);
+        const nextMeta = { width: nextWidth, height: nextHeight, x: estimatedCenteredX, y: nextY };
+        const lastApplied = lastAppliedRef.current;
+        const shouldResize =
+          !lastApplied ||
+          lastApplied.width !== nextMeta.width ||
+          lastApplied.height !== nextMeta.height;
 
         await currentWindow.setIgnoreCursorEvents(false);
-        await currentWindow.setSize(new dpiApi.LogicalSize(nextWidth, nextHeight));
+        if (shouldResize) {
+          await currentWindow.setSize(new dpiApi.LogicalSize(nextWidth, nextHeight));
+        }
 
-        const centeredX = monitor.position.x + Math.round((monitor.size.width - nextWidth) / 2);
-        const nextY = monitor.position.y + 12;
-        await currentWindow.setPosition(new dpiApi.LogicalPosition(centeredX, nextY));
+        const resizedSize = shouldResize ? await currentWindow.outerSize() : currentSize;
+        const recenteredX = monitor.position.x + Math.round((monitor.size.width - resizedSize.width) / 2);
+        const shouldReposition =
+          !lastApplied ||
+          lastApplied.x !== recenteredX ||
+          lastApplied.y !== nextY ||
+          currentPosition.x !== recenteredX ||
+          currentPosition.y !== nextY;
 
-        const actualSize = await currentWindow.outerSize();
+        if (shouldReposition) {
+          await currentWindow.setPosition(new dpiApi.PhysicalPosition(recenteredX, nextY));
+        }
+
+        const actualPosition = shouldReposition ? await currentWindow.outerPosition() : currentPosition;
+        const actualSize = shouldResize ? resizedSize : currentSize;
+        lastAppliedRef.current = {
+          width: nextWidth,
+          height: nextHeight,
+          x: recenteredX,
+          y: nextY
+        };
         console.log(
           '[island-window]',
           JSON.stringify({
@@ -297,22 +366,11 @@ function App() {
             targetWidth: nextWidth,
             targetHeight: nextHeight,
             actualWidth: actualSize.width,
-            actualHeight: actualSize.height
+            actualHeight: actualSize.height,
+            actualX: actualPosition.x,
+            actualY: actualPosition.y
           })
         );
-
-        if (useExpandedWindow) {
-          try {
-            const { invoke } = await import('@tauri-apps/api/core');
-            const debugResult = await invoke<string>('debug_resize_main_window', {
-              width: nextWidth,
-              height: nextHeight
-            });
-            console.log('[island-window] debug-invoke', debugResult);
-          } catch (invokeError) {
-            console.warn('[island-window] debug-invoke-failed', invokeError);
-          }
-        }
       } catch (error) {
         console.error('[island-window] sync-failed', error);
       }
@@ -323,7 +381,7 @@ function App() {
     });
 
     return () => window.cancelAnimationFrame(frameId);
-  }, [useExpandedWindow]);
+  }, [useExpandedWindow, composerOpen, isIslandExpanded, layoutMode, shellResizeVersion]);
 
   const handleTaskStart = () => {
     setShowInput(false);
@@ -332,11 +390,13 @@ function App() {
 
   return (
     <div className="bg-transparent overflow-visible pointer-events-none min-h-screen">
-      <div
-        ref={islandShellRef}
-        className="relative mx-auto flex w-full flex-col items-center pt-3 px-4"
-      >
-        <div className="pointer-events-auto w-full flex flex-col items-center gap-4">
+      <div className="relative mx-auto flex w-full flex-col items-center pt-0 px-0">
+        <div
+          ref={islandShellRef}
+          className={`pointer-events-auto inline-flex flex-col gap-2 ${
+            layoutMode === 'collapsed' ? 'items-end' : 'items-center'
+          }`}
+        >
           <DynamicIsland
             onRequestCreate={() => setShowInput(true)}
             onLayoutModeChange={setLayoutMode}
@@ -353,9 +413,9 @@ function App() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -12, scale: 0.98 }}
                 transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-                className="w-full max-w-[460px] overflow-visible"
+                className="w-[460px] overflow-visible"
               >
-                <div className="flex h-[500px] flex-col rounded-[24px] border border-white/10 bg-black/80 p-4 shadow-[0_24px_60px_rgba(0,0,0,0.5)] backdrop-blur-3xl">
+                <div className="flex h-[430px] flex-col rounded-[24px] border border-white/10 bg-black/80 p-4 shadow-[0_24px_60px_rgba(0,0,0,0.5)] backdrop-blur-3xl">
                   <div className="mb-4 flex items-center justify-between px-2">
                     <div>
                       <div className="text-[10px] uppercase tracking-[0.4em] text-white/30 font-bold">ClawdMate</div>
