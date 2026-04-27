@@ -377,6 +377,19 @@ export function DynamicIsland({
     pushCurrentTaskSnapshot(taskId);
   };
 
+  const handleGoHome = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:43141/dashboard/show', { method: 'POST' });
+      if (response.ok) {
+        return;
+      }
+    } catch {
+      // Ignore bridge errors and use browser fallback.
+    }
+
+    window.open('http://127.0.0.1:5173/app/dashboard', '_blank', 'noopener,noreferrer');
+  };
+
   if (!activeTask) {
     if (activeOrPausedTasks.length > 0) {
       return (
@@ -491,9 +504,7 @@ export function DynamicIsland({
               onCompleteSubTask={handleCompleteSubTask}
               onSkipSubTask={handleSkipSubTask}
               onAddTask={() => onRequestCreate?.()}
-              onGoHome={() => {
-                window.open(window.location.origin, '_blank', 'noopener,noreferrer');
-              }}
+              onGoHome={handleGoHome}
               onCollapse={() => setIsExpanded(false)}
             />
           </motion.div>

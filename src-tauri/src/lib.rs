@@ -212,6 +212,23 @@ fn handle_bridge_request(stream: TcpStream, app: &AppHandle, state: &BridgeState
             let body = format!(r#"{{"visible":{}}}"#, if next { "true" } else { "false" });
             let _ = write_response(stream, "200 OK", "application/json", &body);
         }
+        ("POST", "/dashboard/show") => {
+            if let Some(dashboard_window) = app.get_webview_window("dashboard") {
+                let _ = dashboard_window.show();
+                let _ = dashboard_window.set_focus();
+                let _ = dashboard_window.eval(
+                    "window.location.replace('http://127.0.0.1:5173/app/dashboard')",
+                );
+                let _ = write_response(stream, "200 OK", "application/json", r#"{"ok":true}"#);
+            } else {
+                let _ = write_response(
+                    stream,
+                    "404 Not Found",
+                    "application/json",
+                    r#"{"error":"dashboard_not_found"}"#,
+                );
+            }
+        }
         ("POST", "/tasks/create") => {
             let parsed = serde_json::from_str::<TaskSyncEnvelope>(&body);
             let Ok(envelope) = parsed else {
