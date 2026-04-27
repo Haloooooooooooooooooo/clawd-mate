@@ -1,0 +1,59 @@
+/* 桌宠精灵动画样式 */
+
+.pet-sprite {
+  /* 默认值，会被 JS 设置的 CSS 变量覆盖 */
+  --frame-width: 512px;
+  --frame-height: 768px;
+  --total-width: 2048px;
+  --duration: 0.8s;
+  --display-width: 40px;
+  --display-height: 60px;
+
+  width: var(--display-width);
+  height: var(--display-height);
+  background-repeat: no-repeat;
+  background-size: var(--total-width) var(--display-height);
+
+  /* 保持像素锐利 */
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* ========== 各状态动画 ========== */
+
+.pet-idle {
+  background-image: url('./sprites/clawd-idle.png');
+  animation: pet-play-frames var(--duration) steps(4) infinite;
+}
+
+.pet-working {
+  background-image: url('./sprites/clawd-working.png');
+  animation: pet-play-frames var(--duration) steps(6) infinite;
+}
+
+.pet-alert {
+  background-image: url('./sprites/clawd-alert.png');
+  animation: pet-play-frames var(--duration) steps(4) infinite;
+}
+
+.pet-celebrate {
+  background-image: url('./sprites/clawd-celebrate.png');
+  animation: pet-play-frames var(--duration) steps(6) forwards;
+}
+
+/* 不循环的动画 */
+.pet-no-loop {
+  animation-iteration-count: 1;
+  animation-fill-mode: forwards;
+}
+
+/* ========== 帧动画关键帧 ========== */
+
+@keyframes pet-play-frames {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: calc(-1 * var(--total-width)) 0;
+  }
+}

@@ -1,16 +1,19 @@
-use base64::Engine;
-use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
+use reqwest::header::AUTHORIZATION;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
+use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
 };
 use std::thread;
-use tauri::{AppHandle, Manager, PhysicalPosition};
+use tauri::{AppHandle, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
+use tauri::Url;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -45,6 +48,11 @@ struct TaskSyncPayload {
 struct TaskSyncEnvelope {
     source: String,
     task: TaskSyncPayload,
+}
+
+#[derive(Deserialize)]
+struct ReportGenerateEnvelope {
+    prompt: String,
 }
 
 #[derive(Deserialize)]
@@ -276,6 +284,44 @@ fn handle_bridge_request(stream: TcpStream, app: &AppHandle, state: &BridgeState
             let body = serde_json::json!({ "tasks": tasks }).to_string();
             let _ = write_response(stream, "200 OK", "application/json", &body);
         }
+        ("POST", "/reports/generate") => {
+            let parsed = serde_json::from_str::<ReportGenerateEnvelope>(&body);
+            let Ok(envelope) = parsed else {
+                let _ = write_response(
+                    stream,
+                    "400 Bad Request",
+                    "application/json",
+                    r#"{"error":"invalid_body"}"#,
+                );
+                return;
+            };
+
+            println!(
+                "[daily-report] bridge request received prompt_length={}",
+                envelope.prompt.chars().count()
+            );
+
+            match tauri::async_runtime::block_on(generate_daily_report_image(envelope.prompt)) {
+                Ok(image_data_url) => {
+                    println!(
+                        "[daily-report] bridge request success image_length={}",
+                        image_data_url.len()
+                    );
+                    let body = serde_json::json!({ "imageDataUrl": image_data_url }).to_string();
+                    let _ = write_response(stream, "200 OK", "application/json", &body);
+                }
+                Err(message) => {
+                    println!("[daily-report] bridge request failed message={}", message);
+                    let body = serde_json::json!({ "error": message }).to_string();
+                    let _ = write_response(
+                        stream,
+                        "500 Internal Server Error",
+                        "application/json",
+                        &body,
+                    );
+                }
+            }
+        }
         _ => {
             let _ = write_response(
                 stream,
@@ -343,9 +389,38 @@ fn load_image_model() -> String {
         .unwrap_or_else(|| "gpt-image-2-2026-04-21".to_string())
 }
 
-fn to_data_url(content_type: &str, bytes: &[u8]) -> String {
-    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
-    format!("data:{};base64,{}", content_type, encoded)
+fn find_reference_image_path() -> Option<PathBuf> {
+    let candidates = [
+        PathBuf::from("png/clawd-ref.png"),
+        PathBuf::from("../png/clawd-ref.png"),
+        PathBuf::from("./png/clawd-ref.png"),
+        PathBuf::from("png/clawd.png"),
+        PathBuf::from("../png/clawd.png"),
+        PathBuf::from("./png/clawd.png"),
+    ];
+
+    candidates
+        .into_iter()
+        .find(|path| path.exists() && path.is_file())
+}
+
+fn load_reference_image_part() -> Result<reqwest::multipart::Part, String> {
+    let path = find_reference_image_path()
+        .ok_or_else(|| "没有找到参考图 png/clawd.png，请确认文件存在。".to_string())?;
+
+    let bytes = fs::read(&path)
+        .map_err(|error| format!("读取参考图失败：{} ({})", path.display(), error))?;
+
+    let filename = Path::new(&path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("clawd.png")
+        .to_string();
+
+    reqwest::multipart::Part::bytes(bytes)
+        .file_name(filename)
+        .mime_str("image/png")
+        .map_err(|error| format!("构建参考图上传数据失败：{}", error))
 }
 
 fn summarize_image_api_error(status: reqwest::StatusCode, body: &str) -> String {
@@ -373,6 +448,10 @@ fn summarize_image_api_error(status: reqwest::StatusCode, body: &str) -> String 
         return "图片生成失败：当前请求太频繁或额度不足，请稍后再试。".to_string();
     }
 
+    if status.as_u16() == 524 || normalized.contains("bad_response_status_code") {
+        return "图片服务处理超时了。这次请求已经发到服务端，但服务端没有及时返回，请稍后重试。".to_string();
+    }
+
     if status.as_u16() == 400 || normalized.contains("invalid") || normalized.contains("unsupported") {
         return format!("图片生成失败：请求参数有误。{}", raw_message);
     }
@@ -390,7 +469,7 @@ fn summarize_image_api_error(status: reqwest::StatusCode, body: &str) -> String 
 
 fn summarize_network_error(error: &reqwest::Error) -> String {
     if error.is_timeout() {
-        return "图片生成超时了，请稍后重试。".to_string();
+        return "图片生成超时了。这个图片服务返回较慢，请稍后再试，或适当等待更久。".to_string();
     }
 
     if error.is_connect() {
@@ -408,19 +487,38 @@ async fn generate_daily_report_image(prompt: String) -> Result<String, String> {
     let api_host = load_image_api_host();
     let image_model = load_image_model();
 
-    let client = reqwest::Client::new();
+    println!(
+        "[daily-report] start host={} model={} prompt_length={}",
+        api_host,
+        image_model,
+        prompt.chars().count()
+    );
+
+    let reference_image = load_reference_image_part()?;
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(180))
+        .build()
+        .map_err(|error| format!("创建图片请求客户端失败：{}", error))?;
+    let form = reqwest::multipart::Form::new()
+        .text("model", image_model.clone())
+        .text("prompt", prompt)
+        .text("size", "1024x1280")
+        .part("image", reference_image);
+
     let response = client
-        .post(format!("{}/images/generations", api_host))
+        .post(format!("{}/images/edits", api_host))
         .header(AUTHORIZATION, format!("Bearer {}", api_key))
-        .header(CONTENT_TYPE, "application/json")
-        .json(&serde_json::json!({
-            "model": image_model,
-            "prompt": prompt,
-            "size": "1024x1280"
-        }))
+        .multipart(form)
         .send()
         .await
-        .map_err(|error| summarize_network_error(&error))?;
+        .map_err(|error| {
+            let message = summarize_network_error(&error);
+            println!("[daily-report] network error message={}", message);
+            message
+        })?;
+
+    println!("[daily-report] response status={}", response.status());
 
     if !response.status().is_success() {
         let status = response.status();
@@ -428,13 +526,22 @@ async fn generate_daily_report_image(prompt: String) -> Result<String, String> {
             .text()
             .await
             .unwrap_or_else(|_| "Failed to read error response".to_string());
+        println!(
+            "[daily-report] response error status={} body={}",
+            status,
+            body
+        );
         return Err(summarize_image_api_error(status, &body));
     }
 
     let payload: ImageGenerationApiResponse = response
         .json()
         .await
-        .map_err(|error| format!("图片服务返回的数据解析失败：{}", error))?;
+        .map_err(|error| {
+            let message = format!("图片服务返回的数据解析失败：{}", error);
+            println!("[daily-report] parse error message={}", message);
+            message
+        })?;
 
     let image_item = payload
         .data
@@ -447,6 +554,10 @@ async fn generate_daily_report_image(prompt: String) -> Result<String, String> {
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
     {
+        println!(
+            "[daily-report] success source=b64_json length={}",
+            image_base64.len()
+        );
         return Ok(format!("data:image/png;base64,{}", image_base64));
     }
 
@@ -455,37 +566,31 @@ async fn generate_daily_report_image(prompt: String) -> Result<String, String> {
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
     {
-        let image_response = client
-            .get(&image_url)
-            .send()
-            .await
-            .map_err(|error| format!("图片已生成，但下载图片失败：{}", summarize_network_error(&error)))?;
-
-        if !image_response.status().is_success() {
-            let status = image_response.status();
-            let body = image_response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Failed to read image download error response".to_string());
-            return Err(format!("图片已生成，但下载图片失败。{}", summarize_image_api_error(status, &body)));
-        }
-
-        let content_type = image_response
-            .headers()
-            .get(reqwest::header::CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
-            .map(|value| value.to_string())
-            .unwrap_or_else(|| "image/png".to_string());
-
-        let image_bytes = image_response
-            .bytes()
-            .await
-            .map_err(|error| format!("Failed to read generated image bytes: {}", error))?;
-
-        return Ok(to_data_url(&content_type, &image_bytes));
+        println!("[daily-report] success source=url value={}", image_url);
+        return Ok(image_url);
     }
 
+    println!("[daily-report] success response missing image url and b64_json");
     Err("图片服务返回成功了，但没有拿到图片地址或图片数据。".to_string())
+}
+
+#[tauri::command]
+fn debug_resize_main_window(app: AppHandle, width: f64, height: f64) -> Result<String, String> {
+    let Some(window) = app.get_webview_window("main") else {
+        return Err("main window not found".to_string());
+    };
+
+    window
+        .set_size(tauri::Size::Logical(tauri::LogicalSize::new(width, height)))
+        .map_err(|error| error.to_string())?;
+
+    let outer = window.outer_size().map_err(|error| error.to_string())?;
+    let message = format!(
+        "target={}x{}, actual={}x{}",
+        width, height, outer.width, outer.height
+    );
+    println!("[island-window] {}", message);
+    Ok(message)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -494,6 +599,7 @@ pub fn run() {
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();
             let bridge_state = BridgeState::default();
+            let dashboard_url = Url::parse("http://127.0.0.1:5173").expect("invalid dashboard dev url");
 
             if let Some(monitor) = window.current_monitor()? {
                 let monitor_size = monitor.size();
@@ -506,14 +612,36 @@ pub fn run() {
             bridge_state.island_visible.store(true, Ordering::Relaxed);
             start_bridge_server(app.handle().clone(), bridge_state);
 
+            if app.get_webview_window("dashboard").is_none() {
+                WebviewWindowBuilder::new(
+                    app,
+                    "dashboard",
+                    WebviewUrl::External(dashboard_url),
+                )
+                .title("ClawdMate")
+                .inner_size(1440.0, 960.0)
+                .min_inner_size(1080.0, 720.0)
+                .resizable(true)
+                .decorations(true)
+                .transparent(false)
+                .always_on_top(false)
+                .center()
+                .build()?;
+            }
+
             #[cfg(debug_assertions)]
             {
-                window.open_devtools();
+                if let Some(dashboard_window) = app.get_webview_window("dashboard") {
+                    dashboard_window.open_devtools();
+                }
             }
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![generate_daily_report_image])
+        .invoke_handler(tauri::generate_handler![
+            generate_daily_report_image,
+            debug_resize_main_window
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTaskStore } from '../../stores/taskStore';
 import { useReminder } from '../../hooks/useReminder';
@@ -27,7 +27,7 @@ export function DynamicIsland({
 
   const tasks = useTaskStore((state) => state.tasks);
   const activeTaskId = useTaskStore((state) => state.activeTaskId);
-  const activeTask = tasks.find((t) => t.id === activeTaskId);
+  const activeTask = tasks.find((task) => task.id === activeTaskId);
   const updateTask = useTaskStore((state) => state.updateTask);
   const completeTask = useTaskStore((state) => state.completeTask);
   const completeSubTask = useTaskStore((state) => state.completeSubTask);
@@ -68,9 +68,7 @@ export function DynamicIsland({
     } as const;
 
     void pushTaskFromIsland(
-      hasFocusedOverride
-        ? { ...payload, focused: overrides?.focused }
-        : payload
+      hasFocusedOverride ? { ...payload, focused: overrides?.focused } : payload
     );
   };
 
@@ -79,7 +77,9 @@ export function DynamicIsland({
     if (!latestTask) return;
     pushTaskSync(latestTask, {
       status:
-        latestTask.status === 'paused' || latestTask.status === 'completed' || latestTask.status === 'cancelled'
+        latestTask.status === 'paused' ||
+        latestTask.status === 'completed' ||
+        latestTask.status === 'cancelled'
           ? latestTask.status
           : 'active'
     });
@@ -91,24 +91,16 @@ export function DynamicIsland({
   const activeProgress = activePlannedSeconds > 0 ? activeElapsedSeconds / activePlannedSeconds : 0;
   const activeIsOvertime = activeElapsedSeconds >= activePlannedSeconds && activeElapsedSeconds > 0;
   const activeIsRunning = activeTask?.status === 'active';
-
-  const reminder = useReminder(
-    activeElapsedSeconds,
-    activePlannedSeconds,
-    {
-      onHalfTime: () => {
-        console.log('Half time reached');
-      },
-      onFiveMinutesLeft: () => {
-        console.log('Five minutes left');
-      },
-      onTimeUp: () => {
-        console.log('Time is up');
-      }
-    }
+  const activeOrPausedTasks = tasks.filter(
+    (task) => task.status === 'active' || task.status === 'paused'
   );
 
-  // Use one unified ticking source for all active tasks (main + parallel).
+  const reminder = useReminder(activeElapsedSeconds, activePlannedSeconds, {
+    onHalfTime: () => console.log('Half time reached'),
+    onFiveMinutesLeft: () => console.log('Five minutes left'),
+    onTimeUp: () => console.log('Time is up')
+  });
+
   useEffect(() => {
     let lastTickAt = Date.now();
     const interval = window.setInterval(() => {
@@ -118,7 +110,6 @@ export function DynamicIsland({
 
       const store = useTaskStore.getState();
       const runningTasks = store.tasks.filter((task) => task.status === 'active');
-
       runningTasks.forEach((task) => {
         store.updateTask(task.id, { actualDuration: task.actualDuration + deltaSeconds });
       });
@@ -127,7 +118,6 @@ export function DynamicIsland({
     return () => window.clearInterval(interval);
   }, []);
 
-  // Keep Web timer aligned with island timer by pushing running task snapshots continuously.
   useEffect(() => {
     const interval = window.setInterval(() => {
       const store = useTaskStore.getState();
@@ -189,11 +179,9 @@ export function DynamicIsland({
 
   const handleExtend = (minutes: number) => {
     if (!activeTaskId || !activeTask) return;
-    const currentPlannedMinutes = activeTask?.plannedDuration || 25;
+    const currentPlannedMinutes = activeTask.plannedDuration || 25;
     const currentPlannedSeconds = currentPlannedMinutes * 60;
-    const persistedElapsed = activeTask?.actualDuration || 0;
-
-    // If user extends right after time-up, keep elapsed baseline at least the old planned time.
+    const persistedElapsed = activeTask.actualDuration || 0;
     const nextElapsedBaseline =
       persistedElapsed >= currentPlannedSeconds
         ? Math.max(persistedElapsed, currentPlannedSeconds)
@@ -238,9 +226,8 @@ export function DynamicIsland({
     });
     completeTask(activeTaskId);
 
-    // 切换到下一个并行任务，而不是收起
     const remainingTasks = tasks.filter(
-      (t) => t.id !== activeTaskId && (t.status === 'active' || t.status === 'paused')
+      (task) => task.id !== activeTaskId && (task.status === 'active' || task.status === 'paused')
     );
     if (remainingTasks.length > 0) {
       setActiveTask(remainingTasks[0].id);
@@ -259,7 +246,9 @@ export function DynamicIsland({
       pushTaskSync(previousTask, {
         actualDuration: previousTask.actualDuration,
         status:
-          previousTask.status === 'paused' || previousTask.status === 'completed' || previousTask.status === 'cancelled'
+          previousTask.status === 'paused' ||
+          previousTask.status === 'completed' ||
+          previousTask.status === 'cancelled'
             ? previousTask.status
             : 'active',
         focused: false
@@ -348,7 +337,6 @@ export function DynamicIsland({
     updateTask(activeTaskId, { status: 'cancelled' });
     removeTask(activeTaskId);
 
-    // Keep island flow continuous: switch to next available parallel task.
     const remainingTasks = tasks.filter(
       (task) => task.id !== activeTaskId && (task.status === 'active' || task.status === 'paused')
     );
@@ -368,14 +356,14 @@ export function DynamicIsland({
     try {
       await fetch('http://127.0.0.1:43141/island/hide', { method: 'POST' });
     } catch {
-      // Ignore bridge errors and still try local hide.
+      // Ignore bridge errors.
     }
 
     try {
       const tauriWindow = await import('@tauri-apps/api/window');
       await tauriWindow.getCurrentWindow().hide();
     } catch {
-      // Ignore when running in browser-only mode.
+      // Ignore browser-only mode.
     }
   };
 
@@ -390,8 +378,6 @@ export function DynamicIsland({
   };
 
   if (!activeTask) {
-    const activeOrPausedTasks = tasks.filter((t) => t.status === 'active' || t.status === 'paused');
-
     if (activeOrPausedTasks.length > 0) {
       return (
         <div
@@ -441,9 +427,7 @@ export function DynamicIsland({
             onRequestCreate?.();
           }
         }}
-        className={`group relative w-full max-w-[408px] border border-white/12 bg-black/88 px-4 py-3 text-left shadow-[0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl ${
-          composerOpen ? 'rounded-t-[18px] rounded-b-none border-b-0' : 'rounded-[18px]'
-        }`}
+        className="group relative w-full max-w-[408px] rounded-[18px] border border-white/12 bg-black/88 px-4 py-3 text-left shadow-[0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
       >
@@ -475,18 +459,16 @@ export function DynamicIsland({
     );
   }
 
-  const activeOrPausedTasks = tasks.filter((t) => t.status === 'active' || t.status === 'paused');
-
   return (
     <div ref={islandRootRef}>
       <AnimatePresence mode="wait">
         {isExpanded ? (
           <motion.div
             key="expanded-wrapper"
-            initial={{ width: 280 }}
-            animate={{ width: 420 }}
-            exit={{ width: 280 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            initial={{ width: 460 }}
+            animate={{ width: 460 }}
+            exit={{ width: 320 }}
+            transition={{ duration: 0 }}
           >
             <ExpandedView
               key="expanded"
@@ -508,9 +490,7 @@ export function DynamicIsland({
               onExtendTask={handleExtendTask}
               onCompleteSubTask={handleCompleteSubTask}
               onSkipSubTask={handleSkipSubTask}
-              onAddTask={() => {
-                onRequestCreate?.();
-              }}
+              onAddTask={() => onRequestCreate?.()}
               onGoHome={() => {
                 window.open(window.location.origin, '_blank', 'noopener,noreferrer');
               }}
@@ -520,10 +500,10 @@ export function DynamicIsland({
         ) : (
           <motion.div
             key="collapsed-wrapper"
-            initial={{ width: 420 }}
-            animate={{ width: 280 }}
-            exit={{ width: 280 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+            initial={{ width: 320 }}
+            animate={{ width: 320 }}
+            exit={{ width: 320 }}
+            transition={{ duration: 0 }}
           >
             <CollapsedView
               key="collapsed"
@@ -545,4 +525,3 @@ export function DynamicIsland({
     </div>
   );
 }
-

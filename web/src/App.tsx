@@ -9,6 +9,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import Sidebar from './components/layout/Sidebar';
 import Dashboard from './pages/Dashboard';
 import DailyReportView from './pages/DailyReportView';
+import PetPreviewPage from './pages/PetPreview';
 import { HistoryCardView } from './components/history/HistoryViews';
 import { pullTasksForWeb } from './lib/islandBridge';
 import { useStore } from './store/useStore';
@@ -76,6 +77,7 @@ export default function App() {
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/history" element={<HistoryCardView />} />
                 <Route path="/report" element={<DailyReportView />} />
+                <Route path="/pet" element={<PetPreviewPage />} />
               </Routes>
             </main>
           </div>

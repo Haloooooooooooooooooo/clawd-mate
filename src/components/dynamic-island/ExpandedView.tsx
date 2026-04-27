@@ -1,4 +1,4 @@
-﻿import { motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Pause, Play, CheckCircle2, X } from 'lucide-react';
 import type { Task } from '../../types/task';
 import { ProgressBar } from './ProgressBar';
@@ -63,14 +63,14 @@ export function ExpandedView({
 
   return (
     <motion.div
-      className="w-[420px]"
+      className="w-[460px]"
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.2 }}
     >
       <div className="rounded-[22px] border border-white/12 bg-black/90 shadow-[0_24px_80px_rgba(0,0,0,0.52)] backdrop-blur-2xl">
-        <div className="max-h-[70vh] overflow-y-auto px-3 pb-3 pt-2">
+        <div className="h-full overflow-visible px-3 pb-3 pt-2">
           <div
             className="sticky top-0 z-10 mb-2 flex items-center justify-between rounded-[14px] bg-black/88 px-2 py-2 backdrop-blur-2xl"
             onClick={(event) => {

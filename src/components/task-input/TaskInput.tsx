@@ -13,7 +13,7 @@ export function TaskInput({ onTaskStart, keepCurrentActiveTask = false }: TaskIn
   const [mode, setMode] = useState<'simple' | 'structured'>('simple');
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col">
+    <div className="flex w-full flex-col" data-window-measure="content">
       <div className="mb-4 flex gap-2">
         <button
           onClick={() => setMode('simple')}
@@ -44,7 +44,7 @@ export function TaskInput({ onTaskStart, keepCurrentActiveTask = false }: TaskIn
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
-            className="flex-1 min-h-0"
+            className="w-full"
           >
             <SimpleMode
               onStart={onTaskStart}
@@ -58,7 +58,7 @@ export function TaskInput({ onTaskStart, keepCurrentActiveTask = false }: TaskIn
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
-            className="flex-1 min-h-0"
+            className="w-full"
           >
             <StructuredMode
               onStart={onTaskStart}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
 import { DynamicIsland } from './components/dynamic-island/DynamicIsland';
@@ -44,15 +44,20 @@ function normalizeBridgeSubtasks(
   );
 }
 
-const FRAME_BASE_HEIGHT = 220;
-const FRAME_EXPANDED_HEIGHT = FRAME_BASE_HEIGHT * 3;
-const FRAME_COMPACT_HEIGHT = 420;
+const COLLAPSED_WIDTH = 320;
+const COLLAPSED_HEIGHT = 120;
+const EXPANDED_WIDTH = 460;
+const EXPANDED_ISLAND_HEIGHT = 460;
+const COMPOSER_WINDOW_HEIGHT = 700;
 
 function App() {
   const [showInput, setShowInput] = useState(false);
   const [expandOnTaskStartKey, setExpandOnTaskStartKey] = useState(0);
+  const [layoutMode, setLayoutMode] = useState<'idle' | 'collapsed' | 'expanded'>('idle');
   const lastTaskSyncAtRef = useRef<Record<string, number>>({});
   const lastFocusSyncAtRef = useRef(0);
+  const islandShellRef = useRef<HTMLDivElement>(null);
+  
   const activeTaskId = useTaskStore((state) => state.activeTaskId);
   const addTask = useTaskStore((state) => state.addTask);
   const updateTask = useTaskStore((state) => state.updateTask);
@@ -240,70 +245,138 @@ function App() {
     };
   }, [activeTaskId, addTask, removeTask, setActiveTask, updateTask]);
 
+  const composerOpen = showInput;
+  const isIslandExpanded = layoutMode === 'expanded';
+  const useExpandedWindow = composerOpen || isIslandExpanded;
+
+  useLayoutEffect(() => {
+    let frameId = 0;
+    
+    const syncWindowSize = async () => {
+      try {
+        const [windowApi, dpiApi] = await Promise.all([
+          import('@tauri-apps/api/window'),
+          import('@tauri-apps/api/dpi')
+        ]);
+        const currentWindow = windowApi.getCurrentWindow();
+        if (currentWindow.label !== 'main') {
+          console.warn(
+            '[island-window] skip-non-main',
+            JSON.stringify({ label: currentWindow.label })
+          );
+          return;
+        }
+
+        const monitor = await windowApi.currentMonitor();
+        if (!monitor) {
+          console.warn('[island-window] no-monitor');
+          return;
+        }
+
+        const nextWidth = useExpandedWindow ? EXPANDED_WIDTH : COLLAPSED_WIDTH;
+        const nextHeight = composerOpen
+          ? COMPOSER_WINDOW_HEIGHT
+          : isIslandExpanded
+            ? EXPANDED_ISLAND_HEIGHT
+            : COLLAPSED_HEIGHT;
+
+        await currentWindow.setIgnoreCursorEvents(false);
+        await currentWindow.setSize(new dpiApi.LogicalSize(nextWidth, nextHeight));
+
+        const centeredX = monitor.position.x + Math.round((monitor.size.width - nextWidth) / 2);
+        const nextY = monitor.position.y + 12;
+        await currentWindow.setPosition(new dpiApi.LogicalPosition(centeredX, nextY));
+
+        const actualSize = await currentWindow.outerSize();
+        console.log(
+          '[island-window]',
+          JSON.stringify({
+            layoutMode,
+            composerOpen,
+            useExpandedWindow,
+            targetWidth: nextWidth,
+            targetHeight: nextHeight,
+            actualWidth: actualSize.width,
+            actualHeight: actualSize.height
+          })
+        );
+
+        if (useExpandedWindow) {
+          try {
+            const { invoke } = await import('@tauri-apps/api/core');
+            const debugResult = await invoke<string>('debug_resize_main_window', {
+              width: nextWidth,
+              height: nextHeight
+            });
+            console.log('[island-window] debug-invoke', debugResult);
+          } catch (invokeError) {
+            console.warn('[island-window] debug-invoke-failed', invokeError);
+          }
+        }
+      } catch (error) {
+        console.error('[island-window] sync-failed', error);
+      }
+    };
+
+    frameId = window.requestAnimationFrame(() => {
+      void syncWindowSize();
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [useExpandedWindow]);
+
   const handleTaskStart = () => {
     setShowInput(false);
-    setExpandOnTaskStartKey((value) => value + 1);
+    setExpandOnTaskStartKey((prev) => prev + 1);
   };
-
-  const handleShowInput = () => {
-    setShowInput(true);
-  };
-
-  const handleCloseInput = () => {
-    setShowInput(false);
-  };
-
-  const handleIslandClose = () => {
-    setShowInput(false);
-  };
-
-  const composerOpen = showInput;
-  const composerHeight = hasActiveTask ? FRAME_COMPACT_HEIGHT : FRAME_EXPANDED_HEIGHT;
 
   return (
-    <div className="min-h-screen bg-transparent overflow-visible">
-      <div className="relative mx-auto flex w-full max-w-[560px] flex-col items-center pt-0 pb-6">
-        <DynamicIsland
-          onRequestCreate={handleShowInput}
-          composerOpen={composerOpen}
-          expandOnTaskStartKey={expandOnTaskStartKey}
-          onRequestClose={handleIslandClose}
-        />
+    <div className="bg-transparent overflow-visible pointer-events-none min-h-screen">
+      <div
+        ref={islandShellRef}
+        className="relative mx-auto flex w-full flex-col items-center pt-3 px-4"
+      >
+        <div className="pointer-events-auto w-full flex flex-col items-center gap-4">
+          <DynamicIsland
+            onRequestCreate={() => setShowInput(true)}
+            onLayoutModeChange={setLayoutMode}
+            composerOpen={composerOpen}
+            expandOnTaskStartKey={expandOnTaskStartKey}
+            onRequestClose={() => setShowInput(false)}
+          />
 
-        <AnimatePresence>
-          {composerOpen && (
-            <motion.div
-              key="task-composer"
-              initial={{ opacity: 0, y: -8, scale: 0.99 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -8, scale: 0.99 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className="mt-2 w-full max-w-[420px] overflow-hidden"
-            >
-              <div
-                className="rounded-[18px] border border-white/10 bg-black/84 p-3 shadow-[0_18px_52px_rgba(0,0,0,0.44)] backdrop-blur-2xl flex flex-col"
-                style={{ height: composerHeight }}
+          <AnimatePresence>
+            {composerOpen && (
+              <motion.div
+                key="task-composer"
+                initial={{ opacity: 0, y: -12, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -12, scale: 0.98 }}
+                transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+                className="w-full max-w-[460px] overflow-visible"
               >
-                <div className="mb-2 flex items-center justify-between px-2">
-                  <div>
-                    <div className="text-[11px] uppercase tracking-[0.3em] text-white/35">ClawdMate</div>
-                    <div className="text-sm text-white/62">Create Focus Task</div>
+                <div className="flex h-[500px] flex-col rounded-[24px] border border-white/10 bg-black/80 p-4 shadow-[0_24px_60px_rgba(0,0,0,0.5)] backdrop-blur-3xl">
+                  <div className="mb-4 flex items-center justify-between px-2">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-[0.4em] text-white/30 font-bold">ClawdMate</div>
+                      <div className="text-base font-semibold text-white/80">New Focus Session</div>
+                    </div>
+                    <button
+                      onClick={() => setShowInput(false)}
+                      className="group flex h-8 w-8 items-center justify-center rounded-full bg-white/5 transition-all hover:bg-white/10"
+                    >
+                      <span className="text-white/40 group-hover:text-white/80">×</span>
+                    </button>
                   </div>
-                  <button
-                    onClick={handleCloseInput}
-                    className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/70 transition-colors hover:bg-white/15"
-                  >
-                    取消
-                  </button>
-                </div>
 
-                <div className="flex-1 min-h-0 overflow-y-auto pr-1">
-                  <TaskInput onTaskStart={handleTaskStart} keepCurrentActiveTask={hasActiveTask} />
+                  <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+                    <TaskInput onTaskStart={handleTaskStart} keepCurrentActiveTask={hasActiveTask} />
+                  </div>
                 </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   );

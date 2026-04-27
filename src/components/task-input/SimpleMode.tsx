@@ -71,7 +71,7 @@ export function SimpleMode({
 
   return (
     <motion.div
-      className="flex h-full flex-col rounded-xl bg-white/10 p-4 backdrop-blur-md"
+      className="flex w-full flex-col rounded-xl bg-white/10 p-4 backdrop-blur-md"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
     >

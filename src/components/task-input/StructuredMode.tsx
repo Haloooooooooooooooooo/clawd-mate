@@ -97,13 +97,13 @@ export function StructuredMode({
 
   return (
     <motion.div
-      className="flex h-full min-h-0 flex-col rounded-xl bg-white/10 p-4 backdrop-blur-md"
+      className="flex w-full flex-col rounded-xl bg-white/10 p-4 backdrop-blur-md"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
     >
       <h3 className="mb-3 text-white font-medium">新建结构化任务</h3>
 
-      <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+      <div className="pr-1">
         <input
           type="text"
           value={title}
@@ -158,7 +158,7 @@ export function StructuredMode({
 
         <div className="mb-3">
           <span className="mb-2 block text-sm text-white/60">子任务</span>
-          <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
+          <div className="space-y-2 pr-1">
             {subTaskInputs.map((input, index) => (
               <div key={index} className="flex gap-2">
                 <span className="w-5 self-center text-sm text-white/40">{index + 1}.</span>

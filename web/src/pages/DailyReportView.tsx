@@ -3,13 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Download, RefreshCw, Share2, Calendar, FileImage } from 'lucide-react';
+import { motion } from 'motion/react';
 import { useStore } from '../store/useStore';
 import { getLocalDateKey } from '../lib/date';
 import { getDailyReportEligibility } from '../lib/dailyReportGeneration';
-import { Download, Share2, Calendar, FileImage } from 'lucide-react';
-import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
 import {
   buildDailyImagePrompt,
@@ -20,6 +20,17 @@ import {
 
 const REPORT_IMAGE_STORAGE_PREFIX = 'clawdmate-daily-report-image:';
 const REPORT_PROMPT_STORAGE_PREFIX = 'clawdmate-daily-report-prompt:';
+const REPORT_DEBUG_STORAGE_PREFIX = 'clawdmate-daily-report-debug:';
+
+type GenerateDebugError = Error & {
+  debugLogs?: string[];
+};
+
+type GenerateDailyReportResult = {
+  imageDataUrl: string;
+  source: 'tauri-global' | 'tauri-module' | 'bridge';
+  debugLogs: string[];
+};
 
 function getImageStorageKey(date: string) {
   return `${REPORT_IMAGE_STORAGE_PREFIX}${date}`;
@@ -27,6 +38,31 @@ function getImageStorageKey(date: string) {
 
 function getPromptStorageKey(date: string) {
   return `${REPORT_PROMPT_STORAGE_PREFIX}${date}`;
+}
+
+function getDebugStorageKey(date: string) {
+  return `${REPORT_DEBUG_STORAGE_PREFIX}${date}`;
+}
+
+function debugTimestamp() {
+  return new Date().toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+}
+
+function appendDebugLog(logs: string[], message: string) {
+  const next = `${debugTimestamp()} ${message}`;
+  logs.push(next);
+  console.log(`[daily-report] ${next}`);
+}
+
+function createGenerateError(message: string, debugLogs: string[]) {
+  const error = new Error(message) as GenerateDebugError;
+  error.debugLogs = [...debugLogs];
+  return error;
 }
 
 function normalizeGenerateError(error: unknown) {
@@ -48,8 +84,12 @@ function normalizeGenerateError(error: unknown) {
     return '图片服务当前请求过多，或者账户额度不足。可以稍后再试。';
   }
 
+  if (rawMessage.includes('524') || rawMessage.includes('bad_response_status_code')) {
+    return '图片服务处理超时了。这次请求已经发到服务端，但服务端没有及时返回，请稍后重试。';
+  }
+
   if (rawMessage.includes('超时')) {
-    return '这次生成超时了。可以直接再点一次“一键生成日报”。';
+    return '这次生成超时了。这个图像服务返回比较慢，可以稍后再试。';
   }
 
   if (rawMessage.includes('连接图片服务失败')) {
@@ -60,36 +100,70 @@ function normalizeGenerateError(error: unknown) {
     return '图片服务暂时不稳定，等一会儿再试会更稳。';
   }
 
+  if (rawMessage.includes('当前环境还没有连上桌面端生图能力')) {
+    return '当前环境还没有连上桌面端生图能力。请先运行 `npm run dev:island`，再在 5173 页面里生成日报。';
+  }
+
   if (rawMessage.includes('当前环境不支持桌面端生图调用')) {
     return '当前这个运行环境不能直接调桌面端生图。请在 Tauri 桌面应用里点击生成日报。';
   }
 
   if (rawMessage.includes('Cannot read properties of undefined') && rawMessage.includes('invoke')) {
-    return '当前这个运行环境还没有连上桌面端生图能力。请重启 Tauri 应用后再试。';
+    return '当前环境还没有连上桌面端生图能力。请先运行 `npm run dev:island`，再在 5173 页面里生成日报。';
   }
 
   return rawMessage;
 }
 
-async function invokeGenerateDailyReportImage(prompt: string) {
+async function invokeGenerateDailyReportImage(prompt: string): Promise<GenerateDailyReportResult> {
+  const debugLogs: string[] = [];
+  appendDebugLog(debugLogs, `start promptLength=${prompt.length}`);
+
   const tauriInvoke =
     (globalThis as { __TAURI__?: { core?: { invoke?: <T>(command: string, args?: unknown) => Promise<T> } } })
       .__TAURI__?.core?.invoke;
 
   if (typeof tauriInvoke === 'function') {
-    return tauriInvoke<string>('generate_daily_report_image', { prompt });
+    appendDebugLog(debugLogs, 'try source=tauri-global');
+    try {
+      const imageDataUrl = await tauriInvoke<string>('generate_daily_report_image', { prompt });
+      appendDebugLog(debugLogs, `success source=tauri-global urlLength=${imageDataUrl.length}`);
+      return { imageDataUrl, source: 'tauri-global', debugLogs };
+    } catch (error) {
+      appendDebugLog(
+        debugLogs,
+        `fail source=tauri-global message=${error instanceof Error ? error.message : String(error)}`
+      );
+      throw createGenerateError(
+        error instanceof Error ? error.message : String(error),
+        debugLogs
+      );
+    }
   }
 
   try {
+    appendDebugLog(debugLogs, 'try source=tauri-module');
     const tauriCore = await import('@tauri-apps/api/core');
     if (typeof tauriCore.invoke === 'function') {
-      return tauriCore.invoke<string>('generate_daily_report_image', { prompt });
+      const imageDataUrl = await tauriCore.invoke<string>('generate_daily_report_image', { prompt });
+      appendDebugLog(debugLogs, `success source=tauri-module urlLength=${imageDataUrl.length}`);
+      return { imageDataUrl, source: 'tauri-module', debugLogs };
     }
-  } catch {
-    // Ignore and fall through to the explicit error below.
+    appendDebugLog(debugLogs, 'skip source=tauri-module invoke-missing');
+    throw createGenerateError('当前环境不支持桌面端生图调用。', debugLogs);
+  } catch (error) {
+    if (error instanceof Error && 'debugLogs' in error) {
+      throw error;
+    }
+    appendDebugLog(
+      debugLogs,
+      `fail source=tauri-module message=${error instanceof Error ? error.message : String(error)}`
+    );
+    throw createGenerateError(
+      error instanceof Error ? error.message : String(error),
+      debugLogs
+    );
   }
-
-  throw new Error('当前环境不支持桌面端生图调用，请在 Tauri 桌面应用里使用日报生成。');
 }
 
 export default function DailyReportView() {
@@ -109,6 +183,10 @@ export default function DailyReportView() {
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [generateDebug, setGenerateDebug] = useState<string[]>([]);
+
+  const isGeneratingRef = useRef(false);
+  const handledAutogenRef = useRef<string | null>(null);
 
   const selectedRecord = history.find((record) => record.date === selectedDate);
   const dailyImageSummary = buildDailySummaryForImage(selectedRecord);
@@ -118,7 +196,9 @@ export default function DailyReportView() {
 
   useEffect(() => {
     const storedImage = localStorage.getItem(getImageStorageKey(selectedDate));
+    const storedDebug = localStorage.getItem(getDebugStorageKey(selectedDate));
     setGeneratedImageUrl(storedImage && storedImage.trim().length > 0 ? storedImage : null);
+    setGenerateDebug(storedDebug ? storedDebug.split('\n').filter(Boolean) : []);
     setGenerateError(null);
   }, [selectedDate]);
 
@@ -129,7 +209,11 @@ export default function DailyReportView() {
     }
   }, [searchParams, selectedDate]);
 
-  const handleGenerateReport = async () => {
+  const handleGenerateReport = async (trigger: 'manual' | 'autogen' = 'manual') => {
+    if (isGeneratingRef.current) {
+      return;
+    }
+
     const eligibility = getDailyReportEligibility({
       record: selectedRecord,
       isLoggedIn,
@@ -146,33 +230,62 @@ export default function DailyReportView() {
       return;
     }
 
+    isGeneratingRef.current = true;
     setIsGenerating(true);
     setGenerateError(null);
+
+    const startDebug = [
+      `${debugTimestamp()} trigger=${trigger} date=${selectedDate}`,
+      `${debugTimestamp()} promptPayloadLength=${dailyImagePromptPayload.length}`,
+      `${debugTimestamp()} promptLength=${dailyImagePrompt.length}`
+    ];
+
+    setGenerateDebug(startDebug);
+    localStorage.setItem(getDebugStorageKey(selectedDate), startDebug.join('\n'));
     localStorage.setItem(getPromptStorageKey(selectedDate), dailyImagePromptPayload);
 
     try {
-      const imageDataUrl = await invokeGenerateDailyReportImage(dailyImagePrompt);
-      localStorage.setItem(getImageStorageKey(selectedDate), imageDataUrl);
-      setGeneratedImageUrl(imageDataUrl);
+      const result = await invokeGenerateDailyReportImage(dailyImagePrompt);
+      const nextDebug = [...startDebug, ...result.debugLogs, `${debugTimestamp()} source=${result.source}`];
+      localStorage.setItem(getImageStorageKey(selectedDate), result.imageDataUrl);
+      localStorage.setItem(getDebugStorageKey(selectedDate), nextDebug.join('\n'));
+      setGeneratedImageUrl(result.imageDataUrl);
+      setGenerateDebug(nextDebug);
       incrementDailyReportGenerationCount(generationDateKey, user?.id);
     } catch (error) {
+      const debugLogs = (error as GenerateDebugError).debugLogs ?? startDebug;
+      localStorage.setItem(getDebugStorageKey(selectedDate), debugLogs.join('\n'));
+      setGenerateDebug(debugLogs);
       setGenerateError(normalizeGenerateError(error));
     } finally {
+      isGeneratingRef.current = false;
       setIsGenerating(false);
     }
   };
 
   useEffect(() => {
-    if (searchParams.get('autogen') !== '1') return;
-    const requestedDate = searchParams.get('date');
-    if (requestedDate && requestedDate !== selectedDate) return;
+    const autogen = searchParams.get('autogen');
+    if (autogen !== '1') {
+      handledAutogenRef.current = null;
+      return;
+    }
 
-    void handleGenerateReport().finally(() => {
+    const requestedDate = searchParams.get('date') || selectedDate;
+    if (requestedDate !== selectedDate) return;
+
+    const autogenKey = `${requestedDate}:${autogen}`;
+    if (handledAutogenRef.current === autogenKey || isGeneratingRef.current) {
+      return;
+    }
+
+    handledAutogenRef.current = autogenKey;
+
+    void handleGenerateReport('autogen').finally(() => {
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete('autogen');
       setSearchParams(nextParams, { replace: true });
     });
-  }, [searchParams, setSearchParams, selectedDate]);
+  }, [searchParams, selectedDate, setSearchParams]);
 
   const handleDownloadReport = () => {
     if (!generatedImageUrl) return;
@@ -189,6 +302,17 @@ export default function DailyReportView() {
           <h3 className="font-display text-4xl text-ink font-bold leading-tight">每日复盘</h3>
         </div>
         <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              void handleGenerateReport('manual');
+            }}
+            disabled={isGenerating}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-border-main rounded-xl text-xs font-bold hover:bg-stone-50 transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <RefreshCw size={14} className={isGenerating ? 'animate-spin' : ''} />
+            重新生成
+          </button>
           <button
             type="button"
             onClick={handleDownloadReport}
@@ -245,14 +369,17 @@ export default function DailyReportView() {
                           <p className="text-sm text-stone-400 max-w-md">
                             点击下方按钮后，会把当天记录整理成生图提示词并请求生成。生成成功后，图片会自动显示在这里。
                           </p>
-                          {generateError && (
-                            <p className="text-sm text-red-500 max-w-md">{generateError}</p>
+                          {generateError && <p className="text-sm text-red-500 max-w-md">{generateError}</p>}
+                          {generateDebug.length > 0 && (
+                            <pre className="mt-3 max-w-md rounded-xl bg-stone-100/80 px-3 py-2 text-left text-[11px] leading-5 text-stone-500 whitespace-pre-wrap break-all">
+                              {generateDebug.join('\n')}
+                            </pre>
                           )}
                         </div>
                         <button
                           type="button"
                           onClick={() => {
-                            void handleGenerateReport();
+                            void handleGenerateReport('manual');
                           }}
                           disabled={isGenerating}
                           className="px-6 py-3 rounded-[16px] bg-primary text-white font-bold shadow-lg shadow-primary/20 hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"

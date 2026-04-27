@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "npm --prefix web run dev",
     "dev:island": "npm.cmd exec tauri dev",
-    "dev:island:frontend": "vite --host 127.0.0.1 --port 5174 --strictPort",
+    "dev:island:frontend": "node scripts/dev-island-frontends.mjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"

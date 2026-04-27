@@ -34,7 +34,7 @@ export function getDailyReportEligibility(
     return {
       ok: false,
       reason: 'limit_reached',
-      message: '今天的日报生成次数已经用完了，每个账户每天最多生成 2 次。'
+      message: '今天的日报生成次数已经用完了，每个账号每天最多生成 2 次。'
     };
   }
 

@@ -1,0 +1,65 @@
+/* 桌宠占位组件样式 */
+
+/* 占位容器 */
+.pet-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #2d2d44;
+  border-radius: 8px;
+  font-size: 20px;
+}
+
+.pet-placeholder-emoji {
+  font-size: inherit;
+  line-height: 1;
+}
+
+/* ========== 各状态动画 ========== */
+
+/* 睡觉 - 轻微上下浮动 */
+.pet-placeholder-idle {
+  animation: pet-float 2s ease-in-out infinite;
+}
+
+@keyframes pet-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* 敲键盘 - 快速左右晃动 */
+.pet-placeholder-working {
+  animation: pet-tap 0.15s ease-in-out infinite;
+}
+
+@keyframes pet-tap {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+/* 举牌感叹号 - 放大缩小 */
+.pet-placeholder-alert {
+  animation: pet-pulse 0.6s ease-in-out infinite;
+}
+
+@keyframes pet-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
+/* 撒星星 - 弹跳 */
+.pet-placeholder-celebrate {
+  animation: pet-bounce 0.5s ease-out infinite;
+}
+
+@keyframes pet-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+
+/* ========== 尺寸适配 ========== */
+
+.pet-placeholder-emoji {
+  font-size: calc(16px * var(--pet-scale, 1));
+}

@@ -126,6 +126,7 @@ export default function Sidebar() {
     { name: '今日任务', path: '/app/dashboard', icon: LayoutDashboard },
     { name: '历史记录', path: '/app/history', icon: History },
     { name: '生成日报', path: '/app/report', icon: FileText },
+    { name: '桌宠预览', path: '/app/pet', icon: Zap },
   ];
 
   const handleOpenLogin = () => {
