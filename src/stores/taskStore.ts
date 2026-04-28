@@ -5,6 +5,7 @@ import type { Task, SubTask } from '../types/task';
 interface TaskStore {
   tasks: Task[];
   activeTaskId: string | null;
+  recentCelebrationAt: number;
 
   // Actions
   addTask: (task: Task) => void;
@@ -14,6 +15,7 @@ interface TaskStore {
   pauseTask: (id: string) => void;
   resumeTask: (id: string) => void;
   completeTask: (id: string) => void;
+  triggerCelebration: () => void;
 
   // Subtask actions
   addSubTask: (taskId: string, subTask: SubTask) => void;
@@ -49,6 +51,7 @@ export const useTaskStore = create<TaskStore>()(
     (set, get) => ({
       tasks: [],
       activeTaskId: null,
+      recentCelebrationAt: 0,
 
       addTask: (task) =>
         set((state) => {
@@ -102,10 +105,20 @@ export const useTaskStore = create<TaskStore>()(
       },
 
       completeTask: (id) =>
-        get().updateTask(id, {
-          status: 'completed',
-          completedAt: new Date()
-        }),
+        set((state) => ({
+          recentCelebrationAt: Date.now(),
+          tasks: state.tasks.map((task) =>
+            task.id === id
+              ? {
+                  ...task,
+                  status: 'completed',
+                  completedAt: new Date()
+                }
+              : task
+          )
+        })),
+
+      triggerCelebration: () => set({ recentCelebrationAt: Date.now() }),
 
       addSubTask: (taskId, subTask) =>
         set((state) => ({
@@ -160,6 +173,9 @@ export const useTaskStore = create<TaskStore>()(
 
           return {
             tasks,
+            recentCelebrationAt: tasks.some((task) => task.id === taskId && task.status === 'completed')
+              ? Date.now()
+              : state.recentCelebrationAt,
             activeTaskId: shouldClearActive ? null : state.activeTaskId
           };
         }),
@@ -210,6 +226,9 @@ export const useTaskStore = create<TaskStore>()(
 
           return {
             tasks,
+            recentCelebrationAt: tasks.some((task) => task.id === taskId && task.status === 'completed')
+              ? Date.now()
+              : state.recentCelebrationAt,
             activeTaskId: shouldClearActive ? null : state.activeTaskId
           };
         })

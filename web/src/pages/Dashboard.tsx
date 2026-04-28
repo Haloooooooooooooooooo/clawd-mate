@@ -13,6 +13,7 @@ import { getTaskActualDurationSeconds } from '../lib/taskTime';
 import { Plus, Play, Pause, CheckCircle2, X, ChevronRight, SkipForward, Menu } from 'lucide-react';
 import { cn, formatTime } from '../lib/utils';
 import { motion } from 'motion/react';
+import { PetSprite, type PetStatus } from '@pet';
 
 type DashboardSubtask = {
   id: string;
@@ -66,7 +67,8 @@ export default function Dashboard() {
     user,
     getDailyReportGenerationCount,
     openLoginModal,
-    showToast
+    showToast,
+    recentCelebrationAt
   } = useStore();
   const [taskTitle, setTaskTitle] = useState('');
   const [duration, setDuration] = useState(30);
@@ -75,8 +77,10 @@ export default function Dashboard() {
   const [subtasks, setSubtasks] = useState<string[]>([]);
   const [highlightTaskId, setHighlightTaskId] = useState<string | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
+  const [celebrateTrigger, setCelebrateTrigger] = useState(false);
   const parallelTasksRef = useRef<HTMLDivElement>(null);
   const historyListRef = useRef<HTMLDivElement>(null);
+  const celebrateTimeoutRef = useRef<number | null>(null);
 
   const getTaskRemaining = (task: { status: string; startTime: number; remainingTime: number }) => {
     if (task.status !== 'running') return Math.max(0, task.remainingTime);
@@ -95,6 +99,19 @@ export default function Dashboard() {
   const currentTaskRemaining = currentTask ? getTaskRemaining(currentTask) : 0;
   const currentTaskElapsed = currentTask ? getTaskElapsed(currentTask) : 0;
   const isFinished = Boolean(currentTask) && currentTaskRemaining <= 0;
+  const hasAnyOvertime = activeTasks.some((task) => getTaskRemaining(task) <= 0);
+  const hasAnyRunning = activeTasks.some((task) => task.status === 'running');
+  const dashboardPetStatus: PetStatus =
+    celebrateTrigger
+      ? 'celebrate'
+      : activeTasks.length === 0
+      ? 'idle'
+      : hasAnyOvertime
+      ? 'alert'
+      : hasAnyRunning
+      ? 'working'
+      : 'idle';
+  const dashboardPetScaleMultiplier = dashboardPetStatus === 'working' ? 2.45 : 1.95;
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -102,6 +119,25 @@ export default function Dashboard() {
     }, 500);
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!recentCelebrationAt) return;
+
+    setCelebrateTrigger(true);
+    if (celebrateTimeoutRef.current) {
+      window.clearTimeout(celebrateTimeoutRef.current);
+    }
+    celebrateTimeoutRef.current = window.setTimeout(() => {
+      setCelebrateTrigger(false);
+      celebrateTimeoutRef.current = null;
+    }, 3200);
+
+    return () => {
+      if (celebrateTimeoutRef.current) {
+        window.clearTimeout(celebrateTimeoutRef.current);
+      }
+    };
+  }, [recentCelebrationAt]);
 
   // Auto-scroll to finished task
   useEffect(() => {
@@ -207,13 +243,9 @@ export default function Dashboard() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col items-center py-10 overflow-y-auto px-8">
         <div className="w-full max-w-4xl space-y-16">
-          <header className="flex items-center gap-8 mb-4">
-            <div className="w-24 h-24 bg-soft-apricot/20 rounded-[4px] flex items-center justify-center border border-border-main shadow-inner">
-              <img 
-                alt="Crab Mascot" 
-                className="w-14 h-14 object-contain" 
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuDpqjQixAlv4oSgwcgFRtZctVTqAjzvUyz7suFamjBKGWhHT25b-sTjZa2vI-T2NBclHRWUnOLYbqrPo0FQryCrpH3L6jCtxUvJ6nZZc8edBVX9Quez9idH7nSuNkf4OqybEODl58qE3S6Uuk-kVzUe3RGb8yoyfR0c5AgMiQsx6H1MlRsWa6-9CPC77jz8rrj1b5FVR8R7HMfnDcgieNBigKxNCld_vB5kUwUOdL_urWj9DNxvnagMIDMlf9ITLgsMwJ221S2D8wZX"
-              />
+          <header className="mb-4 flex items-center gap-7">
+            <div className="-ml-2 -mt-5 flex h-28 w-28 shrink-0 items-center justify-center">
+              <PetSprite status={dashboardPetStatus} size="lg" scaleMultiplier={dashboardPetScaleMultiplier} />
             </div>
             <div className="space-y-1">
               <h2 className="font-display text-5xl font-bold text-ink tracking-tight">早上好，Alex</h2>

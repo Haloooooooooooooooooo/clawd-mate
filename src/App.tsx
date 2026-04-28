@@ -67,6 +67,7 @@ function App() {
   const updateTask = useTaskStore((state) => state.updateTask);
   const removeTask = useTaskStore((state) => state.removeTask);
   const setActiveTask = useTaskStore((state) => state.setActiveTask);
+  const triggerCelebration = useTaskStore((state) => state.triggerCelebration);
   const hasActiveTask = useTaskStore((state) =>
     state.tasks.some((task) => task.id === activeTaskId && task.status !== 'completed')
   );
@@ -134,6 +135,9 @@ function App() {
 
         if (existingTask) {
           if (status === 'cancelled' || status === 'completed') {
+            if (status === 'completed') {
+              triggerCelebration();
+            }
             removeTask(existingTask.id);
             const remainingTasks = useTaskStore
               .getState()
@@ -247,7 +251,7 @@ function App() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [activeTaskId, addTask, removeTask, setActiveTask, updateTask]);
+  }, [activeTaskId, addTask, removeTask, setActiveTask, triggerCelebration, updateTask]);
 
   const composerOpen = showInput;
   const isIslandExpanded = layoutMode === 'expanded';

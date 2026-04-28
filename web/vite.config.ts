@@ -13,6 +13,7 @@ export default defineConfig(({mode}) => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
+        '@pet': path.resolve(__dirname, '../pet'),
       },
     },
     server: {

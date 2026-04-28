@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import type { Task } from '../../types/task';
 import { ProgressBar } from './ProgressBar';
+import { PetSprite, type PetStatus } from '@pet';
 
 interface CollapsedViewProps {
   task: Task;
@@ -15,6 +16,7 @@ interface CollapsedViewProps {
   onCancel: () => void;
   onExpand: () => void;
   onCloseIsland: () => void;
+  petStatus: PetStatus;
 }
 
 export function CollapsedView({
@@ -28,9 +30,11 @@ export function CollapsedView({
   onExtend,
   onCancel,
   onExpand,
-  onCloseIsland
+  onCloseIsland,
+  petStatus
 }: CollapsedViewProps) {
   const [isHovering, setIsHovering] = useState(false);
+  const petScaleMultiplier = petStatus === 'working' ? 1.22 : 1;
   const elapsedMinutes = Math.floor(task.actualDuration / 60);
   const plannedMinutes = Math.max(1, task.plannedDuration);
   const remainingMinutes = Math.floor(Math.max(0, remainingSeconds) / 60);
@@ -66,14 +70,10 @@ export function CollapsedView({
       </button>
 
         <div className="rounded-[18px] border border-white/10 bg-black/90 px-3 py-2 shadow-[0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl">
-          <div className="flex items-center gap-2.5">
-            <motion.div
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 via-rose-500 to-orange-400 text-xl shadow-[0_8px_24px_rgba(244,114,182,0.35)]"
-              animate={{ rotate: [0, -4, 4, 0] }}
-              transition={{ duration: 2.6, repeat: Infinity, repeatDelay: 3 }}
-            >
-              🦀
-            </motion.div>
+          <div className="flex items-center gap-2">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center">
+              <PetSprite status={petStatus} size="sm" scaleMultiplier={petScaleMultiplier} />
+            </div>
 
           <div className="min-w-0 flex-1">
             <div className="mb-1.5 flex items-center justify-between gap-2">

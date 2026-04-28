@@ -4,6 +4,12 @@
     "target": "es2023",
     "lib": ["ES2023", "DOM"],
     "module": "esnext",
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
+    "paths": {
+      "@pet": ["./pet"],
+      "@pet/*": ["./pet/*"]
+    },
     "types": ["vite/client"],
     "skipLibCheck": true,
 
@@ -21,5 +27,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src", "pet"]
 }

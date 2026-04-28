@@ -236,6 +236,7 @@ export const PET_SIZES: Record<PetSize, number> = {
 
 ## 参考资料
 
+
 - [CSS Sprite Animation Tutorial](https://css-tricks.com/snippets/css/using-css-sprites/)
 - [Aseprite 官方文档](https://www.aseprite.org/docs/)
 - [Piskel 在线编辑器](https://www.piskelapp.com)

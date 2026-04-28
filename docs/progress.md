@@ -1,4 +1,4 @@
-# ClawdMate 进度记录
+﻿# ClawdMate 进度记录
 
 > 最后更新：2026-04-27
 > 用途：下次打开项目时，先读这份文档，就能快速知道当前卡点、已验证事实、下一步怎么继续。
@@ -32,7 +32,7 @@
 一句话：
 `生图链路是通的，但三方平台对带图请求不够稳定，而且有图片输入限流。`
 
-### 2. 灵动岛窗口问题仍未解决
+### 2. 灵动岛窗口问题已经解决
 当前最核心的问题：
 - 灵动岛窗口外层有一块过大的透明/白色容器
 - 这块容器会挡住背后页面的点击
@@ -193,8 +193,9 @@
 
 | # | 任务 | 状态 | 相关文件 |
 |---|------|------|----------|
-| 1 | 在 DynamicIsland 中实现 `getPetStatus()` 状态判断逻辑 | ⏳ 待完成 | `src/components/dynamic-island/DynamicIsland.tsx` |
-| 2 | 在 DynamicIsland 中实现 celebrate 触发与自动恢复 | ⏳ 待完成 | `src/components/dynamic-island/DynamicIsland.tsx` |
+| 1 | 在 DynamicIsland 中实现 `getPetStatus()` 状态判断逻辑 | ✅ 已完成 | `src/components/dynamic-island/DynamicIsland.tsx` |
+| 2 | 在 DynamicIsland 中实现 celebrate 触发与自动恢复 | ✅ 已完成 | `src/components/dynamic-island/DynamicIsland.tsx` |
+| 3 | 替换灵动岛无任务时的 🦀 emoji 为 PetSprite | ✅ 已完成 | `src/components/dynamic-island/DynamicIsland.tsx` |
 | 3 | 替换灵动岛无任务时的 🦀 emoji 为 PetSprite | ⏳ 待完成 | `src/components/dynamic-island/DynamicIsland.tsx` |
 | 4 | 替换灵动岛有暂停任务时的 🦀 emoji 为 PetSprite | ⏳ 待完成 | `src/components/dynamic-island/DynamicIsland.tsx` |
 | 5 | 在 Dashboard 中实现 `getPetStatus()` 状态判断逻辑 | ⏳ 待完成 | `web/src/pages/Dashboard.tsx` |

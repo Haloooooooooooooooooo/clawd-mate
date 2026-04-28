@@ -30,9 +30,28 @@ function shouldClearGuestSnapshotOnBoot(): boolean {
   return Date.now() - lastUnloadAt > SAME_SESSION_REOPEN_MS;
 }
 
+function clearPersistedHistoryOnBoot() {
+  try {
+    const raw = localStorage.getItem(GUEST_PERSIST_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as { state?: Record<string, unknown> };
+    if (!parsed?.state) return;
+    parsed.state = {
+      ...parsed.state,
+      history: [],
+      recentCelebrationAt: 0
+    };
+    localStorage.setItem(GUEST_PERSIST_KEY, JSON.stringify(parsed));
+  } catch {
+    // Ignore malformed local snapshots.
+  }
+}
+
 if (!getPersistedLoggedInFlag() && shouldClearGuestSnapshotOnBoot()) {
   localStorage.removeItem(GUEST_PERSIST_KEY);
 }
+
+clearPersistedHistoryOnBoot();
 
 window.addEventListener('pagehide', () => {
   localStorage.setItem(LAST_UNLOAD_AT_KEY, String(Date.now()));

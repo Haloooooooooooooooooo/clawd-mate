@@ -118,6 +118,7 @@ function buildBridgePayload(task: Task, statusOverride?: TaskStatus, focusedOver
 interface AppState {
   tasks: Task[];
   history: DailyRecord[];
+  recentCelebrationAt: number;
   reportGenerationCountByUserAndDate: Record<string, number>;
   closedSyncIds: Record<string, 'done' | 'cancelled'>;
   lastTaskSyncAtById: Record<string, number>;
@@ -156,6 +157,7 @@ interface AppState {
   closeLoginModal: () => void;
   showToast: (message: string) => void;
   clearToast: () => void;
+  triggerCelebration: () => void;
   getDailyReportGenerationCount: (date: string, userId?: string | null) => number;
   incrementDailyReportGenerationCount: (date: string, userId?: string | null) => void;
   hydrateCloudData: (userId: string, options?: { guestHistoryToImport?: DailyRecord[] }) => Promise<void>;
@@ -180,50 +182,12 @@ function getGuestStorage() {
   return createJSONStorage(() => localStorage);
 }
 
-function mergeHistoryRecords(localHistory: DailyRecord[], cloudHistory: DailyRecord[]): DailyRecord[] {
-  const allTasks = [...cloudHistory.flatMap((record) => record.tasks), ...localHistory.flatMap((record) => record.tasks)];
-  const unique = new Map<string, Task>();
-
-  allTasks.forEach((task) => {
-    const normalizedSubtasks = task.subtasks
-      .map((subtask) => `${subtask.title.trim()}#${subtask.status}`)
-      .join('||');
-    // Use a business fingerprint instead of task.id.
-    // Same record from local/cloud can have different ids.
-    const key = [
-      task.title.trim(),
-      task.status,
-      String(task.createdAt),
-      String(task.totalDuration),
-      String(task.remainingTime),
-      normalizedSubtasks
-    ].join('|');
-    if (!unique.has(key)) {
-      unique.set(key, task);
-    }
-  });
-
-  const grouped = new Map<string, Task[]>();
-  Array.from(unique.values()).forEach((task) => {
-    const date = getTaskHistoryDateKey(task);
-    const list = grouped.get(date) || [];
-    list.push(task);
-    grouped.set(date, list);
-  });
-
-  return Array.from(grouped.entries())
-    .sort((a, b) => (a[0] > b[0] ? -1 : 1))
-    .map(([date, tasks]) => ({
-      date,
-      tasks: tasks.sort((a, b) => getTaskTerminalTimestamp(a) - getTaskTerminalTimestamp(b))
-    }));
-}
-
 export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
       tasks: [],
       history: [],
+      recentCelebrationAt: 0,
       reportGenerationCountByUserAndDate: {},
       closedSyncIds: {},
       lastTaskSyncAtById: {},
@@ -427,6 +391,7 @@ export const useStore = create<AppState>()(
                 ? null
                 : state.activeTaskId,
             history: appendHistory(state.history, finalizedTask),
+            recentCelebrationAt: mappedStatus === 'done' ? Date.now() : state.recentCelebrationAt,
             closedSyncIds: {
               ...state.closedSyncIds,
               [syncId]: mappedStatus as 'done' | 'cancelled'
@@ -722,6 +687,7 @@ export const useStore = create<AppState>()(
           tasks: state.tasks.filter((item) => item.id !== id),
           activeTaskId: state.activeTaskId === id ? null : state.activeTaskId,
           history: appendHistory(state.history, finalizedTask),
+          recentCelebrationAt: Date.now(),
           closedSyncIds: {
             ...state.closedSyncIds,
             [syncId]: 'done'
@@ -829,6 +795,8 @@ export const useStore = create<AppState>()(
 
       clearToast: () => set({ toast: null }),
 
+      triggerCelebration: () => set({ recentCelebrationAt: Date.now() }),
+
       getDailyReportGenerationCount: (date, userId) => {
         const normalizedUserId = userId?.trim();
         if (!normalizedUserId) return 0;
@@ -851,17 +819,13 @@ export const useStore = create<AppState>()(
 
       hydrateCloudData: async (userId, options) => {
         const snapshot = await loadCloudSnapshot(userId);
-        const guestHistory = Array.isArray(options?.guestHistoryToImport) ? options.guestHistoryToImport : [];
-        const mergedHistory = guestHistory.length > 0
-          ? mergeHistoryRecords(guestHistory, snapshot.history)
-          : snapshot.history;
+        void options;
 
         set((state) => ({
           ...state,
-          // Strict account isolation: authenticated sessions only show the account snapshot,
-          // optionally plus guest history explicitly imported during this login.
+          // On every fresh app run we intentionally start with an empty history view.
           tasks: [],
-          history: mergedHistory,
+          history: [],
           activeTaskId: null,
           closedSyncIds: {},
           lastTaskSyncAtById: {},
@@ -870,9 +834,7 @@ export const useStore = create<AppState>()(
           lastBridgeSyncAt: 0
         }));
 
-        if (guestHistory.length > 0) {
-          queueCloudSync({ historyOnly: true });
-        }
+        void snapshot;
       },
 
       syncCloudData: async (options) => {

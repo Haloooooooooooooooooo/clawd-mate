@@ -6,6 +6,7 @@ import { pushTaskFromIsland } from '../../lib/islandBridge';
 import type { Task } from '../../types/task';
 import { CollapsedView } from './CollapsedView';
 import { ExpandedView } from './ExpandedView';
+import { type PetStatus, PetSprite } from '@pet';
 
 interface DynamicIslandProps {
   onRequestCreate?: () => void;
@@ -23,10 +24,13 @@ export function DynamicIsland({
   onRequestClose
 }: DynamicIslandProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [celebrateTrigger, setCelebrateTrigger] = useState(false);
+  const celebrateTimeoutRef = useRef<number | null>(null);
   const islandRootRef = useRef<HTMLDivElement>(null);
 
   const tasks = useTaskStore((state) => state.tasks);
   const activeTaskId = useTaskStore((state) => state.activeTaskId);
+  const recentCelebrationAt = useTaskStore((state) => state.recentCelebrationAt);
   const activeTask = tasks.find((task) => task.id === activeTaskId);
   const updateTask = useTaskStore((state) => state.updateTask);
   const completeTask = useTaskStore((state) => state.completeTask);
@@ -95,11 +99,56 @@ export function DynamicIsland({
     (task) => task.status === 'active' || task.status === 'paused'
   );
 
+  // 桌宠状态判断逻辑
+  const getPetStatus = (): PetStatus => {
+    // celebrate 优先（短暂显示）
+    if (celebrateTrigger) return 'celebrate';
+
+    // 无任务 → 睡觉
+    if (activeOrPausedTasks.length === 0) return 'idle';
+
+    // 检查是否有任何任务超时
+    const hasAnyOvertime = activeOrPausedTasks.some((task) => {
+      const elapsed = task.actualDuration || 0;
+      const planned = (task.plannedDuration || 25) * 60;
+      return elapsed >= planned && elapsed > 0;
+    });
+    if (hasAnyOvertime) return 'alert';
+
+    // 检查是否有任何任务正在进行
+    const hasAnyRunning = activeOrPausedTasks.some((task) => task.status === 'active');
+    if (hasAnyRunning) return 'working';
+
+    // 所有任务都暂停 → 睡觉
+    return 'idle';
+  };
+
   const reminder = useReminder(activeElapsedSeconds, activePlannedSeconds, {
     onHalfTime: () => console.log('Half time reached'),
     onFiveMinutesLeft: () => console.log('Five minutes left'),
     onTimeUp: () => console.log('Time is up')
   });
+  const currentPetStatus = getPetStatus();
+  const currentPetScaleMultiplier = currentPetStatus === 'working' ? 1.22 : 1;
+
+  useEffect(() => {
+    if (!recentCelebrationAt) return;
+
+    setCelebrateTrigger(true);
+    if (celebrateTimeoutRef.current) {
+      window.clearTimeout(celebrateTimeoutRef.current);
+    }
+    celebrateTimeoutRef.current = window.setTimeout(() => {
+      setCelebrateTrigger(false);
+      celebrateTimeoutRef.current = null;
+    }, 3200);
+
+    return () => {
+      if (celebrateTimeoutRef.current) {
+        window.clearTimeout(celebrateTimeoutRef.current);
+      }
+    };
+  }, [recentCelebrationAt]);
 
   useEffect(() => {
     let lastTickAt = Date.now();
@@ -220,6 +269,7 @@ export function DynamicIsland({
 
   const handleComplete = () => {
     if (!activeTaskId || !activeTask) return;
+
     pushTaskSync(activeTask, {
       actualDuration: activeTask.actualDuration,
       status: 'completed'
@@ -416,9 +466,9 @@ export function DynamicIsland({
           >
             ×
           </button>
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 via-rose-500 to-orange-400 text-xl shadow-[0_8px_24px_rgba(244,114,182,0.35)]">
-              🦀
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center">
+              <PetSprite status={currentPetStatus} size="sm" scaleMultiplier={currentPetScaleMultiplier} />
             </div>
             <div className="min-w-0 flex-1">
               <div className="mb-0.5 text-sm font-semibold text-white">点击恢复专注任务</div>
@@ -455,14 +505,10 @@ export function DynamicIsland({
         >
           ×
         </button>
-        <div className="flex items-center gap-3">
-          <motion.div
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 via-rose-500 to-orange-400 text-xl shadow-[0_8px_24px_rgba(244,114,182,0.35)]"
-            animate={{ rotate: [0, -5, 5, 0] }}
-            transition={{ duration: 2.6, repeat: Infinity, repeatDelay: 3 }}
-          >
-            🦀
-          </motion.div>
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center">
+            <PetSprite status={currentPetStatus} size="sm" scaleMultiplier={currentPetScaleMultiplier} />
+          </div>
           <div className="min-w-0 flex-1">
             <div className="mb-0.5 text-sm font-semibold text-white">点击添加任务开始学习</div>
             <div className="text-xs text-white/50">Desktop island is waiting</div>
@@ -491,6 +537,7 @@ export function DynamicIsland({
               remainingSeconds={activeRemainingSeconds}
               isRunning={activeIsRunning}
               isOvertime={activeIsOvertime}
+              petStatus={currentPetStatus}
               onPause={handlePause}
               onResume={handleResume}
               onComplete={handleComplete}
@@ -530,6 +577,7 @@ export function DynamicIsland({
               onCancel={handleCancel}
               onExpand={() => setIsExpanded(true)}
               onCloseIsland={handleCloseIsland}
+              petStatus={currentPetStatus}
             />
           </motion.div>
         )}

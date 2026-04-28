@@ -5,6 +5,7 @@ export interface PetSpriteProps {
   status: PetStatus
   size?: PetSize
   className?: string
+  scaleMultiplier?: number
 }
 
 // 精灵图路径（放在 public 目录下，直接用绝对路径访问）
@@ -15,9 +16,14 @@ const SPRITE_IMAGES: Record<PetStatus, string> = {
   celebrate: '/pet/sprites/clawd-celebrate.png',
 }
 
-export function PetSprite({ status, size = 'md', className = '' }: PetSpriteProps) {
+export function PetSprite({
+  status,
+  size = 'md',
+  className = '',
+  scaleMultiplier = 1,
+}: PetSpriteProps) {
   const config = PET_ANIMATIONS[status]
-  const scale = PET_SIZES[size]
+  const scale = PET_SIZES[size] * scaleMultiplier
 
   // 计算精灵图总宽度
   const totalWidth = config.frameWidth * config.frameCount
