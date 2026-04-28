@@ -70,7 +70,7 @@ export default function App() {
         <Route path="/app/*" element={
           <div className="min-h-screen bg-main-bg">
             <Sidebar />
-            <main className="ml-64 min-h-screen">
+            <main className="ml-[280px] min-h-screen">
               <Routes>
                 <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
                 <Route path="/dashboard" element={<Dashboard />} />

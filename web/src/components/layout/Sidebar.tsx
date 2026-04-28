@@ -1,11 +1,11 @@
-﻿/**
+/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { useEffect, useState } from 'react';
-import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, History, FileText, LogOut, Plus, LogIn, Zap } from 'lucide-react';
+import { NavLink, Link } from 'react-router-dom';
+import { LogOut, Plus } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { useStore } from '../../store/useStore';
@@ -119,10 +119,12 @@ export default function Sidebar() {
   }, [hydrateCloudData, setLoggedIn, syncCloudData]);
 
   const navItems = [
-    { name: '今日任务', path: '/app/dashboard', icon: LayoutDashboard },
-    { name: '历史记录', path: '/app/history', icon: History },
-    { name: '生成日报', path: '/app/report', icon: FileText },
+    { name: '今日任务', path: '/app/dashboard' },
+    { name: '历史记录', path: '/app/history' },
+    { name: '生成日报', path: '/app/report' },
   ];
+
+  const userInitial = (user?.avatar || user?.name?.trim()?.charAt(0) || 'AL').toUpperCase();
 
   const handleOpenLogin = () => {
     resetAuthForm();
@@ -240,82 +242,102 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 border-r-2 border-border-sidebar bg-sidebar-bg flex flex-col py-6 z-50">
-      <div className="flex flex-col h-full space-y-8">
-        <div className="px-5 flex items-center gap-3">
-          <div className="w-14 h-14 bg-[#FFF8EC] rounded-[4px] flex items-center justify-center overflow-hidden border-2 border-border-main shadow-[3px_3px_0_#C9B69D]">
+    <aside className="fixed left-0 top-0 z-50 flex h-screen w-[280px] shrink-0 flex-col border-r-2 border-border-sidebar bg-sidebar-bg">
+      <div className="border-b-2 border-border-sidebar bg-warm-paper px-5 py-6">
+        <div className="flex items-start gap-1.5">
+          <div className="-mt-1 flex h-[68px] w-[68px] shrink-0 items-center justify-center overflow-visible bg-transparent">
             <img
-              alt="Orange pixel-art crab mascot"
-              className="w-10 h-10 pixel-icon object-contain"
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuBAW6yqc6Zzd8cYC-fF5_1M3_jgDcSydLUmC_jRBP5MrrXfz7j48DgO5JzrOCksalEZmRvMhX7oTQveaEm-ieWPI7vL0g_piM5j5F5Kh-evEPHlxJdj0QF71TvmnJqj8aqU8ubjkI0MzAjmeXbg-kUyE-b9DUBI5mhWXvHIJRNBkOjNFsbypEUPzunWHSfvIB5JCzA6YpYjBZlE2fZdnfQPIWLHYiMBZP04AVkeFk91w_EcCCVC8g7m2r_BXEyBB5ZhI8_F3AnnMYty"
+              alt="ClawdMate mascot"
+              className="h-16 w-16 object-contain pixel-icon"
+              src="/clawd.png"
             />
           </div>
-          <div>
-            <h1 className="text-[36px] leading-none font-black tracking-tight text-primary font-display">ClawdMate</h1>
-            <p className="text-[12px] text-muted-text font-bold mt-1 font-body">温和的高效</p>
+          <div className="min-w-0 pt-1">
+            <h1 className="font-display text-[28px] font-bold leading-none tracking-[0.04em] text-ink">ClawdMate</h1>
+            <p className="mt-1 text-[12px] font-medium tracking-[0.22em] text-muted-text">温和的高效</p>
           </div>
         </div>
+      </div>
 
-        <nav className="flex-1 space-y-2 px-3">
+      <div className="flex min-h-0 flex-1 flex-col">
+        <nav className="flex-1 space-y-2 px-5 py-6">
           {navItems.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-3 px-4 py-3 min-h-[56px] transition-colors text-[20px] border-2 rounded-[4px] font-body',
+                  'group flex min-h-[62px] items-center gap-4 px-5 py-4 text-[18px] font-medium text-i2 transition-colors',
                   isActive
-                    ? 'text-primary font-bold bg-soft-apricot border-[#F5C49B] border-l-4 border-l-primary'
-                    : 'text-ink bg-[#FFF8EC] border-transparent hover:border-[#E3D2BA]'
+                    ? 'border border-border-main bg-soft-apricot text-primary shadow-[2px_2px_0_var(--color-o3)]'
+                    : 'border border-transparent bg-transparent text-i2 hover:bg-[#fff8f2] hover:text-ink'
                 )
               }
             >
-              <item.icon size={20} />
-              <span className="font-semibold">{item.name}</span>
+              {({ isActive }) => (
+                <>
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      'h-3 w-3 shrink-0 border-[1.5px] transition-colors',
+                      isActive ? 'border-primary bg-primary' : 'border-[color:var(--color-i4)] bg-transparent'
+                    )}
+                  />
+                  <span className={cn('truncate', isActive ? 'font-semibold' : 'font-medium')}>{item.name}</span>
+                </>
+              )}
             </NavLink>
           ))}
+
         </nav>
 
-        <div className="px-4 mt-auto">
+        <div className="border-t-2 border-border-sidebar px-5 py-6">
+          <Link
+            to="/"
+            className="mb-3 flex min-h-[44px] w-full items-center justify-center gap-2 border border-border-main/60 bg-warm-paper/70 px-4 py-2 text-[13px] font-semibold tracking-[0.02em] text-muted-text shadow-[2px_2px_0_rgba(44,32,24,0.22)] transition-colors hover:bg-[#fff8f2] hover:text-ink"
+          >
+            <span aria-hidden="true" className="text-[13px]">←</span>
+            <span>返回首页</span>
+          </Link>
+
           <button
             onClick={toggleIsland}
             className={cn(
-              'w-full py-3 min-h-[54px] rounded-[4px] font-bold flex items-center justify-center gap-2 transition-all pixel-button-primary',
+              'flex min-h-[62px] w-full items-center justify-center gap-3 px-5 py-4 text-[16px] font-semibold tracking-[0.03em] pixel-button-primary',
               isIslandVisible ? 'opacity-95' : ''
             )}
           >
-            <Zap size={16} fill={isIslandVisible ? 'currentColor' : 'none'} />
-            <span className="text-[18px] font-body">{isIslandVisible ? '关闭灵动岛' : '召唤灵动岛'}</span>
+            <span className="h-3 w-3 shrink-0 rounded-full border-2 border-white/80" />
+            <span>{isIslandVisible ? '关闭灵动岛' : '召唤灵动岛'}</span>
           </button>
-        </div>
 
-        <div className="px-4 pt-4 border-t-2 border-border-sidebar">
-          <div className="relative">
+          <div className="relative mt-4">
             {isLoggedIn ? (
               <>
                 <button
                   onClick={() => setShowLogout(!showLogout)}
                   className={cn(
-                    'w-full flex items-center gap-3 p-3 rounded-[4px] transition-all group border-2 border-border-main bg-[#FFF8EC]',
-                    showLogout ? 'bg-soft-apricot' : 'hover:bg-[#FFF0DF]'
+                    'flex min-h-[52px] w-full items-center gap-3 border border-transparent bg-transparent px-3 py-2 text-left text-[13px] font-medium text-muted-text shadow-none',
+                    showLogout ? 'bg-[#fff1e5]' : 'hover:bg-[#fff8f2]'
                   )}
                 >
-                  <div className="w-9 h-9 rounded-[4px] bg-[#FFF8EC] flex items-center justify-center text-primary border-2 border-border-main shrink-0 font-display font-black text-xs">
-                    {user?.avatar || 'AL'}
+                  <span className="text-[16px] text-i3">→</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold text-ink">{user?.name || '用户'}</p>
+                    <p className="truncate text-[11px] text-muted-text">个人账户</p>
                   </div>
-                  <div className="flex-1 text-left overflow-hidden">
-                    <p className="text-xs font-bold text-ink truncate">{user?.name || '用户'}</p>
-                    <p className="text-[10px] text-muted-text font-medium truncate">个人账户</p>
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-border-main bg-bg text-[11px] font-bold text-primary shadow-[1px_1px_0_var(--color-o3)]">
+                    {userInitial}
                   </div>
                 </button>
 
                 <AnimatePresence>
                   {showLogout && (
                     <motion.div
-                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      initial={{ opacity: 0, y: 10, scale: 0.96 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                      className="absolute bottom-full left-0 w-full mb-3 bg-[#FFF8EC] border-2 border-border-main rounded-[4px] p-1.5 z-50 paper-texture"
+                      exit={{ opacity: 0, y: 10, scale: 0.96 }}
+                      className="absolute bottom-full left-0 z-50 mb-3 w-full border-2 border-border-main bg-o5 p-2 shadow-[3px_3px_0_var(--color-o3)]"
                     >
                       <button
                         onClick={() => {
@@ -332,7 +354,7 @@ export default function Sidebar() {
                             }
                           })();
                         }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-red-500 hover:bg-red-50 transition-colors text-xs font-bold rounded-[4px]"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-[13px] font-semibold text-red-500 shadow-none hover:bg-red-50"
                       >
                         <LogOut size={14} />
                         <span>退出登录</span>
@@ -344,12 +366,10 @@ export default function Sidebar() {
             ) : (
               <button
                 onClick={handleOpenLogin}
-                className="w-full flex items-center gap-3 p-2.5 rounded-[4px] bg-[#FFF8EC] text-ink border-2 border-border-main hover:bg-soft-apricot transition-all font-bold text-xs"
+                className="flex min-h-[48px] w-full items-center gap-3 border border-transparent bg-transparent px-3 py-2 text-left text-[13px] font-medium text-muted-text shadow-none hover:bg-[#fff8f2]"
               >
-                <div className="w-8 h-8 rounded-[4px] bg-soft-apricot border-2 border-border-main flex items-center justify-center shrink-0">
-                  <LogIn size={16} />
-                </div>
-                <span>登录</span>
+                <span className="text-[16px] text-i3">→</span>
+                <span className="font-medium text-muted-text">登录</span>
               </button>
             )}
           </div>
@@ -373,7 +393,7 @@ export default function Sidebar() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-md bg-[#FFFDF7] rounded-[4px] p-8 border-2 border-border-main shadow-[5px_5px_0_#C9B69D] paper-texture overflow-hidden"
+              className="relative w-full max-w-md overflow-hidden border-2 border-border-main bg-o5 p-8 shadow-[5px_5px_0_var(--color-o3)] paper-texture"
             >
               <div className="text-center space-y-2 mb-8">
                 <h3 className="text-3xl font-display font-bold text-ink leading-tight">
@@ -431,10 +451,10 @@ export default function Sidebar() {
                 )}
               </div>
 
-              <button
-                onClick={() => {
-                  void handleAuthSubmit();
-                }}
+                      <button
+                        onClick={() => {
+                          void handleAuthSubmit();
+                        }}
                 disabled={authSubmitting}
                 className="w-full mt-8 pixel-button-primary py-3 font-bold"
               >
@@ -446,14 +466,14 @@ export default function Sidebar() {
               <div className="mt-6 text-center">
                 <p className="text-xs text-stone-400 font-medium">
                   {authMode === 'login' ? (
-                    <>还没有账号？ <button onClick={() => { resetAuthForm(); setAuthMode('register'); }} className="text-primary-accent font-bold hover:underline">立即注册</button></>
+                    <>还没有账号？ <button onClick={() => { resetAuthForm(); setAuthMode('register'); }} className="border-0 bg-transparent p-0 text-primary-accent font-bold shadow-none hover:underline">立即注册</button></>
                   ) : (
-                    <>已有账号？ <button onClick={() => { resetAuthForm(); setAuthMode('login'); }} className="text-primary-accent font-bold hover:underline">返回登录</button></>
+                    <>已有账号？ <button onClick={() => { resetAuthForm(); setAuthMode('login'); }} className="border-0 bg-transparent p-0 text-primary-accent font-bold shadow-none hover:underline">返回登录</button></>
                   )}
                 </p>
               </div>
 
-              <button onClick={() => { resetAuthForm(); closeLoginModal(); }} className="absolute top-6 right-6 p-2 rounded-[4px] hover:bg-[#FFF0DF] transition-colors text-stone-500">
+              <button onClick={() => { resetAuthForm(); closeLoginModal(); }} className="absolute top-6 right-6 border-0 bg-transparent p-2 text-stone-500 shadow-none hover:bg-[#FFF0DF] transition-colors">
                 <Plus size={20} className="rotate-45" />
               </button>
             </motion.div>

@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion'
+﻿import { AnimatePresence, motion } from 'framer-motion'
 import { useState } from 'react'
 import { PetSprite, type PetStatus } from '@pet'
 import type { Task } from '../../types/task'
@@ -40,14 +40,14 @@ export function CollapsedView({
   const remainingMinutes = Math.floor(Math.max(0, remainingSeconds) / 60)
   const remainingRemainSeconds = Math.max(0, remainingSeconds) % 60
   const timeText = isOvertime
-    ? 'Time is up'
-    : `Remaining ${remainingMinutes}:${remainingRemainSeconds.toString().padStart(2, '0')}`
+    ? '时间到了!'
+    : `剩余时间: ${remainingMinutes}:${remainingRemainSeconds.toString().padStart(2, '0')}`
 
   return (
     <motion.div
       role="button"
       tabIndex={0}
-      className="group relative w-[352px] cursor-pointer"
+      className="dynamic-island group relative w-[352px] cursor-pointer"
       onClick={onExpand}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -60,16 +60,6 @@ export function CollapsedView({
       whileHover={{ scale: 1.008 }}
       whileTap={{ scale: 0.99 }}
     >
-      <motion.div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-[-2px] rounded-[20px] bg-[conic-gradient(from_0deg_at_50%_50%,rgba(138,255,222,0.08)_0deg,rgba(63,255,213,0.82)_70deg,rgba(199,255,245,0.36)_128deg,rgba(14,121,90,0.88)_205deg,rgba(40,255,210,0.62)_290deg,rgba(138,255,222,0.08)_360deg)] opacity-90 blur-[10px]"
-        animate={{ rotate: 360 }}
-        transition={{ duration: 12, repeat: Infinity, ease: 'linear' }}
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 rounded-[18px] border border-emerald-300/35 shadow-[0_0_18px_rgba(63,255,213,0.28),0_0_34px_rgba(41,230,200,0.14)]"
-      />
       <div
         data-tauri-drag-region
         onClick={(event) => event.stopPropagation()}
@@ -84,17 +74,25 @@ export function CollapsedView({
           event.stopPropagation()
           onCloseIsland()
         }}
-        className="absolute right-2 top-2 z-30 flex h-6 w-6 items-center justify-center rounded-full border border-white/25 bg-white/10 text-sm font-bold text-white/85 opacity-0 scale-90 transition-all hover:bg-white/20 hover:text-white group-hover:scale-100 group-hover:opacity-100 group-focus-within:scale-100 group-focus-within:opacity-100"
+        className="absolute right-2 top-2 z-30 flex h-6 w-6 items-center justify-center rounded-[6px] border border-orange-300/70 bg-orange-500/85 text-sm font-bold text-white opacity-0 scale-90 transition-all hover:bg-orange-400 group-hover:scale-100 group-hover:opacity-100 group-focus-within:scale-100 group-focus-within:opacity-100"
         aria-label="Close island"
       >
         x
       </button>
 
-      <div className="relative overflow-hidden rounded-[18px] border border-emerald-200/20 bg-[radial-gradient(circle_at_8%_50%,rgba(79,255,222,0.22),rgba(6,14,26,0.96)_40%),radial-gradient(circle_at_72%_20%,rgba(114,255,226,0.14),transparent_62%),linear-gradient(110deg,rgba(8,19,24,0.99)_0%,rgba(5,12,18,0.98)_100%)] px-3 py-2 shadow-[0_0_0_1px_rgba(255,255,255,0.06)_inset,0_18px_60px_rgba(0,0,0,0.48),0_0_24px_rgba(29,214,181,0.16)] backdrop-blur-2xl">
-        <div className="pointer-events-none absolute inset-x-10 bottom-0 h-12 bg-[radial-gradient(ellipse_at_bottom,rgba(23,255,207,0.2),rgba(23,255,207,0)_68%)]" />
-        <div className="pointer-events-none absolute inset-0 rounded-[18px] border border-white/10" />
+      <div className="relative overflow-hidden rounded-[999px] border border-white/12 bg-[rgba(9,11,14,0.9)] px-3 py-2 shadow-[0_20px_55px_rgba(0,0,0,0.46),inset_0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-[20px]">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.08),rgba(255,255,255,0))]" />
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-[45%] bg-[linear-gradient(to_right,rgba(110,231,183,0.16),rgba(110,231,183,0))]" />
+        <div className="pointer-events-none absolute inset-[1px] rounded-[999px] border border-white/6" />
+        <div className="pointer-events-none absolute inset-x-8 bottom-0 h-10 bg-[radial-gradient(ellipse_at_bottom,rgba(110,231,183,0.1),rgba(110,231,183,0)_72%)]" />
 
-        <div className="relative flex items-center gap-2">
+        <div className="relative flex items-center gap-2 min-h-[56px]">
+          <div className="pointer-events-none absolute right-9 top-0 text-[11px] font-medium text-white/65">
+            <span className="text-[#39FFD8]">{elapsedMinutes}</span>
+            <span className="mx-0.5 text-white/42">/</span>
+            <span>{plannedMinutes}</span>
+            <span>min</span>
+          </div>
           <div className="flex h-14 w-14 shrink-0 items-center justify-center">
             <PetSprite status={petStatus} size="sm" scaleMultiplier={petScaleMultiplier} />
           </div>
@@ -105,15 +103,9 @@ export function CollapsedView({
                 <div className="truncate text-[13px] font-semibold text-white/90">
                   {task.title}
                 </div>
-                <div className="-mt-0.5 text-[11px] text-white/60">
+                <div className={`-mt-0.5 text-[11px] ${isOvertime ? 'font-semibold text-orange-400' : 'text-white/60'}`}>
                   {timeText}
                 </div>
-              </div>
-              <div className="shrink-0 text-[11px] font-medium text-white/60">
-                <span className="text-[#39FFD8]">{elapsedMinutes}</span>
-                <span className="mx-0.5 text-white/42">/</span>
-                <span>{plannedMinutes}</span>
-                <span>min</span>
               </div>
             </div>
             <div className="-mt-0.5">
@@ -141,7 +133,7 @@ export function CollapsedView({
                       className="h-[22px] rounded-full bg-emerald-500 px-2 text-[11px] font-medium text-white transition-colors hover:bg-emerald-400"
                       aria-label="Complete task"
                     >
-                      ✓
+                      完成
                     </button>
                     <button
                       type="button"
@@ -216,3 +208,4 @@ export function CollapsedView({
     </motion.div>
   )
 }
+

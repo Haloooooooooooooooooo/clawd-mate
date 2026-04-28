@@ -149,26 +149,26 @@ function CalendarView({ onSelectDate }: { onSelectDate: (record: DailyRecord) =>
           const isCurrentMonth = isSameMonth(day, monthStart);
 
           return (
-            <div key={idx} className={cn('bg-[#FFFDF7] min-h-[140px] p-3 flex flex-col gap-2 relative group border border-[#E6D8C3]', !isCurrentMonth && 'bg-stone-50/50')}>
-              <div className="flex justify-end mb-1">
+            <div key={idx} className={cn('bg-[#FFFDF7] min-h-[126px] p-2.5 flex flex-col gap-1.5 relative group border border-[#E6D8C3]', !isCurrentMonth && 'bg-stone-50/50')}>
+              <div className="mb-0.5 flex justify-end">
                 <span className={cn('text-[12px] font-bold', isToday ? 'text-white bg-primary w-7 h-7 flex items-center justify-center rounded-[4px] border border-primary-accent' : isCurrentMonth ? 'text-ink' : 'text-stone-300')}>
                   {format(day, 'd')}
                 </span>
               </div>
 
               {record && (
-                <div className="mt-1 space-y-2">
+                <div className="mt-0.5 space-y-1.5">
                   <p className="text-[10px] text-muted-leaf font-bold">● 完成 {record.tasks.filter(t => t.status === 'done').length}</p>
-                  <div className="flex flex-col gap-1.5 overflow-hidden">
+                  <div className="flex flex-col gap-1 overflow-hidden">
                     {record.tasks.slice(0, 2).map((t, i) => (
-                      <div key={i} className="flex items-center gap-2 text-[10px] text-muted-text truncate bg-[#FFF8EC] px-2 py-1 rounded-[4px] border border-border-main">
+                      <div key={i} className="flex items-center gap-2 text-[10px] text-muted-text truncate bg-[#FFF8EC] px-2 py-0.5 rounded-[4px] border border-border-main">
                         <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', t.status === 'done' ? 'bg-muted-leaf' : 'bg-primary')} />
                         <span className={cn('truncate font-medium', t.status === 'done' && 'opacity-60')}>{t.title}</span>
                       </div>
                     ))}
                     {record.tasks.length > 2 && <p className="text-[9px] text-stone-500 pl-2 font-bold italic">...+{record.tasks.length - 2} 更多</p>}
                   </div>
-                  <button onClick={() => onSelectDate(record)} className="mt-2 w-full py-2 text-[10px] text-primary-accent font-bold border-2 border-primary-accent rounded-[4px] hover:bg-soft-apricot opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                  <button onClick={() => onSelectDate(record)} className="mt-1.5 w-full py-1.5 text-[10px] text-primary-accent font-bold border-2 border-primary-accent rounded-[4px] hover:bg-soft-apricot opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
                     <span>详细回顾</span>
                     <ChevronRight size={10} />
                   </button>
@@ -179,11 +179,6 @@ function CalendarView({ onSelectDate }: { onSelectDate: (record: DailyRecord) =>
         })}
       </div>
 
-      <div className="flex items-center justify-center gap-8 py-4 border-t-2 border-border-main bg-[#FFF8EC]">
-        <div className="flex items-center gap-2 text-[12px] font-bold text-ink"><span className="w-2 h-2 rounded-full bg-[#3E8A45]" /><span>完成任务</span></div>
-        <div className="flex items-center gap-2 text-[12px] font-bold text-ink"><span className="w-2 h-2 rounded-full bg-[#D84A30]" /><span>取消任务</span></div>
-        <div className="flex items-center gap-2 text-[12px] font-bold text-ink"><span className="font-mono">...</span><span>表示更多</span></div>
-      </div>
     </div>
   );
 }
@@ -194,11 +189,19 @@ export function HistoryCardView() {
   const [view, setView] = useState<'card' | 'calendar'>('card');
 
   return (
-    <div className="px-8 py-8 space-y-8 max-w-7xl mx-auto">
-      <header className="flex justify-between items-end border-b-2 border-border-main pb-6">
-        <div className="space-y-1">
-          <span className="text-[18px] tracking-wide text-olive font-bold">往期日志回顾</span>
-          <h3 className="font-display text-[64px] text-ink font-black leading-tight">历史记录</h3>
+    <div className={cn(
+      "px-8 max-w-7xl mx-auto",
+      view === 'calendar' ? "py-4 space-y-4" : "py-5 space-y-5"
+    )}>
+      <header className={cn(
+        "flex justify-between border-b-2 border-border-main",
+        view === 'calendar' ? "items-center pb-4" : "items-end pb-5"
+      )}>
+      <div className={cn(view === 'calendar' ? "space-y-0" : "space-y-1")}>
+          <h3 className={cn(
+            "font-display text-ink font-black leading-tight",
+            view === 'calendar' ? "text-[48px]" : "text-[58px]"
+          )}>历史记录</h3>
         </div>
 
         <div className="flex bg-[#FFF8EC] p-1 border-2 border-border-main rounded-[4px] relative overflow-hidden">

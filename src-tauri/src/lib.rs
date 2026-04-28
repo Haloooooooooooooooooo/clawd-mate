@@ -12,7 +12,7 @@ use std::sync::{
     Arc, Mutex,
 };
 use std::thread;
-use tauri::{AppHandle, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
 use tauri::Url;
 
 fn position_main_window_at_top_center(window: &tauri::WebviewWindow) -> tauri::Result<()> {
@@ -26,6 +26,61 @@ fn position_main_window_at_top_center(window: &tauri::WebviewWindow) -> tauri::R
     }
 
     Ok(())
+}
+
+fn dashboard_navigation_script() -> &'static str {
+    r#"
+      (function () {
+        const targetPath = '/app/dashboard';
+        const targetUrl = new URL(targetPath, window.location.origin).toString();
+        if (window.location.pathname !== targetPath) {
+          window.location.replace(targetUrl);
+        } else {
+          window.location.replace(targetUrl);
+        }
+      })();
+    "#
+}
+
+fn ensure_dashboard_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
+    if let Some(window) = app.get_webview_window("dashboard") {
+        return Ok(window);
+    }
+
+    #[cfg(debug_assertions)]
+    let dashboard_window = {
+        let dashboard_url = Url::parse("http://127.0.0.1:5173").expect("invalid dashboard dev url");
+        WebviewWindowBuilder::new(app, "dashboard", WebviewUrl::External(dashboard_url))
+            .title("ClawdMate")
+            .inner_size(1440.0, 960.0)
+            .min_inner_size(1080.0, 720.0)
+            .resizable(true)
+            .decorations(true)
+            .transparent(false)
+            .always_on_top(false)
+            .center()
+            .build()?
+    };
+
+    #[cfg(not(debug_assertions))]
+    let dashboard_window = {
+        WebviewWindowBuilder::new(
+            app,
+            "dashboard",
+            WebviewUrl::App(PathBuf::from("index.html")),
+        )
+        .title("ClawdMate")
+        .inner_size(1440.0, 960.0)
+        .min_inner_size(1080.0, 720.0)
+        .resizable(true)
+        .decorations(true)
+        .transparent(false)
+        .always_on_top(false)
+        .center()
+        .build()?
+    };
+
+    Ok(dashboard_window)
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -204,6 +259,7 @@ fn handle_bridge_request(stream: TcpStream, app: &AppHandle, state: &BridgeState
                 let _ = window.show();
             }
             state.island_visible.store(true, Ordering::Relaxed);
+            let _ = app.emit("island:shown", ());
             let _ = write_response(stream, "200 OK", "application/json", r#"{"visible":true}"#);
         }
         ("POST", "/island/hide") => {
@@ -219,6 +275,7 @@ fn handle_bridge_request(stream: TcpStream, app: &AppHandle, state: &BridgeState
                 if next {
                     let _ = position_main_window_at_top_center(&window);
                     let _ = window.show();
+                    let _ = app.emit("island:shown", ());
                 } else {
                     let _ = window.hide();
                 }
@@ -228,20 +285,22 @@ fn handle_bridge_request(stream: TcpStream, app: &AppHandle, state: &BridgeState
             let _ = write_response(stream, "200 OK", "application/json", &body);
         }
         ("POST", "/dashboard/show") => {
-            if let Some(dashboard_window) = app.get_webview_window("dashboard") {
+            match ensure_dashboard_window(&app) {
+                Ok(dashboard_window) => {
+                let _ = dashboard_window.unminimize();
                 let _ = dashboard_window.show();
                 let _ = dashboard_window.set_focus();
-                let _ = dashboard_window.eval(
-                    "window.location.replace('http://127.0.0.1:5173/app/dashboard')",
-                );
+                let _ = dashboard_window.eval(dashboard_navigation_script());
                 let _ = write_response(stream, "200 OK", "application/json", r#"{"ok":true}"#);
-            } else {
+                }
+                Err(_) => {
                 let _ = write_response(
                     stream,
-                    "404 Not Found",
+                    "500 Internal Server Error",
                     "application/json",
-                    r#"{"error":"dashboard_not_found"}"#,
+                    r#"{"error":"dashboard_open_failed"}"#,
                 );
+                }
             }
         }
         ("POST", "/tasks/create") => {
@@ -631,7 +690,6 @@ pub fn run() {
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();
             let bridge_state = BridgeState::default();
-            let dashboard_url = Url::parse("http://127.0.0.1:5173").expect("invalid dashboard dev url");
 
             position_main_window_at_top_center(&window)?;
 
@@ -639,22 +697,7 @@ pub fn run() {
             bridge_state.island_visible.store(true, Ordering::Relaxed);
             start_bridge_server(app.handle().clone(), bridge_state);
 
-            if app.get_webview_window("dashboard").is_none() {
-                WebviewWindowBuilder::new(
-                    app,
-                    "dashboard",
-                    WebviewUrl::External(dashboard_url),
-                )
-                .title("ClawdMate")
-                .inner_size(1440.0, 960.0)
-                .min_inner_size(1080.0, 720.0)
-                .resizable(true)
-                .decorations(true)
-                .transparent(false)
-                .always_on_top(false)
-                .center()
-                .build()?;
-            }
+            let _ = ensure_dashboard_window(&app.handle())?;
 
             #[cfg(debug_assertions)]
             {

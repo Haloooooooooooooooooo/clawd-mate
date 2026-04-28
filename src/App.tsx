@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { listen } from '@tauri-apps/api/event';
 import { v4 as uuidv4 } from 'uuid';
 import { DynamicIsland } from './components/dynamic-island/DynamicIsland';
 import { TaskInput } from './components/task-input/TaskInput';
@@ -55,6 +56,7 @@ const WINDOW_BOTTOM_PADDING = 0;
 function App() {
   const [showInput, setShowInput] = useState(false);
   const [expandOnTaskStartKey, setExpandOnTaskStartKey] = useState(0);
+  const [collapseOnSummonKey, setCollapseOnSummonKey] = useState(0);
   const [layoutMode, setLayoutMode] = useState<'idle' | 'collapsed' | 'expanded'>('idle');
   const [shellResizeVersion, setShellResizeVersion] = useState(0);
   const lastTaskSyncAtRef = useRef<Record<string, number>>({});
@@ -234,7 +236,6 @@ function App() {
             lastFocusSyncAtRef.current = incomingUpdatedAt;
           }
           setActiveTask(taskId);
-          setExpandOnTaskStartKey((value) => value + 1);
         }
         if (syncId) {
           lastTaskSyncAtRef.current[syncId] = incomingUpdatedAt;
@@ -256,6 +257,40 @@ function App() {
   const composerOpen = showInput;
   const isIslandExpanded = layoutMode === 'expanded';
   const useExpandedWindow = composerOpen || isIslandExpanded;
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+
+    void (async () => {
+      try {
+        unlisten = await listen('island:shown', () => {
+          setShowInput(false);
+          setCollapseOnSummonKey((value) => value + 1);
+        });
+      } catch (error) {
+        console.error('[island-window] listen-failed', error);
+      }
+    })();
+
+    return () => {
+      if (unlisten) {
+        void unlisten();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const windowApi = await import('@tauri-apps/api/window');
+        const currentWindow = windowApi.getCurrentWindow();
+        if (currentWindow.label !== 'main') return;
+        await currentWindow.setShadow(false);
+      } catch (error) {
+        console.warn('[island-window] setShadow(false) failed', error);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (!islandShellRef.current || typeof ResizeObserver === 'undefined') {
@@ -416,6 +451,7 @@ function App() {
             onLayoutModeChange={setLayoutMode}
             composerOpen={composerOpen}
             expandOnTaskStartKey={expandOnTaskStartKey}
+            collapseOnSummonKey={collapseOnSummonKey}
             onRequestClose={() => setShowInput(false)}
           />
 

@@ -64,3 +64,86 @@ body,
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+.dynamic-island {
+  --island-neon: #39ff14;
+  --island-neon-soft: rgba(57, 255, 20, 0.22);
+  --island-neon-mid: rgba(57, 255, 20, 0.36);
+  position: relative;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(12, 16, 18, 0.72);
+  backdrop-filter: blur(22px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 0 26px var(--island-neon-soft),
+    inset 0 0 36px rgba(0, 0, 0, 0.62);
+  animation: islandBreath 3.6s ease-in-out infinite;
+}
+
+.dynamic-island::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: conic-gradient(
+    from 0deg at 50% 50%,
+    transparent 0deg,
+    transparent 248deg,
+    rgba(255, 255, 255, 0.2) 266deg,
+    var(--island-neon-mid) 282deg,
+    rgba(188, 255, 174, 0.45) 300deg,
+    rgba(0, 0, 0, 0) 332deg,
+    transparent 360deg
+  );
+  animation: edgeFlow 2.8s linear infinite;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  padding: 1px;
+  filter: saturate(1.1);
+}
+
+.dynamic-island::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.1),
+    rgba(255, 255, 255, 0.02) 35%,
+    transparent 70%
+  );
+}
+
+@keyframes islandBreath {
+  0%,
+  100% {
+    box-shadow:
+      0 0 20px rgba(57, 255, 20, 0.14),
+      inset 0 0 36px rgba(0, 0, 0, 0.62);
+  }
+
+  50% {
+    box-shadow:
+      0 0 32px rgba(57, 255, 20, 0.24),
+      0 0 54px rgba(57, 255, 20, 0.11),
+      inset 0 0 42px rgba(0, 0, 0, 0.68);
+  }
+}
+
+@keyframes edgeFlow {
+  0% {
+    transform: rotate(0deg);
+    opacity: 0.92;
+  }
+  100% {
+    transform: rotate(360deg);
+    opacity: 0.92;
+  }
+}

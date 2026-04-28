@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTaskStore } from '../../stores/taskStore';
 import { useReminder } from '../../hooks/useReminder';
@@ -13,6 +13,7 @@ interface DynamicIslandProps {
   onLayoutModeChange?: (mode: 'idle' | 'collapsed' | 'expanded') => void;
   composerOpen?: boolean;
   expandOnTaskStartKey?: number;
+  collapseOnSummonKey?: number;
   onRequestClose?: () => void;
 }
 
@@ -21,12 +22,14 @@ export function DynamicIsland({
   onLayoutModeChange,
   composerOpen = false,
   expandOnTaskStartKey = 0,
+  collapseOnSummonKey = 0,
   onRequestClose
 }: DynamicIslandProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [celebrateTrigger, setCelebrateTrigger] = useState(false);
   const celebrateTimeoutRef = useRef<number | null>(null);
   const islandRootRef = useRef<HTMLDivElement>(null);
+  const lastExpandTriggerRef = useRef(expandOnTaskStartKey);
 
   const tasks = useTaskStore((state) => state.tasks);
   const activeTaskId = useTaskStore((state) => state.activeTaskId);
@@ -99,15 +102,15 @@ export function DynamicIsland({
     (task) => task.status === 'active' || task.status === 'paused'
   );
 
-  // 桌宠状态判断逻辑
+  // 妗屽疇鐘舵€佸垽鏂€昏緫
   const getPetStatus = (): PetStatus => {
-    // celebrate 优先（短暂显示）
+    // celebrate 浼樺厛锛堢煭鏆傛樉绀猴級
     if (celebrateTrigger) return 'celebrate';
 
-    // 无任务 → 睡觉
+    // 鏃犱换鍔?鈫?鐫¤
     if (activeOrPausedTasks.length === 0) return 'idle';
 
-    // 检查是否有任何任务超时
+    // 妫€鏌ユ槸鍚︽湁浠讳綍浠诲姟瓒呮椂
     const hasAnyOvertime = activeOrPausedTasks.some((task) => {
       const elapsed = task.actualDuration || 0;
       const planned = (task.plannedDuration || 25) * 60;
@@ -115,11 +118,11 @@ export function DynamicIsland({
     });
     if (hasAnyOvertime) return 'alert';
 
-    // 检查是否有任何任务正在进行
+    // 妫€鏌ユ槸鍚︽湁浠讳綍浠诲姟姝ｅ湪杩涜
     const hasAnyRunning = activeOrPausedTasks.some((task) => task.status === 'active');
     if (hasAnyRunning) return 'working';
 
-    // 所有任务都暂停 → 睡觉
+    // 鎵€鏈変换鍔￠兘鏆傚仠 鈫?鐫¤
     return 'idle';
   };
 
@@ -219,7 +222,15 @@ export function DynamicIsland({
   }, [composerOpen, isExpanded]);
 
   useEffect(() => {
-    if (!activeTaskId) return;
+    if (collapseOnSummonKey <= 0) return;
+    setIsExpanded(false);
+  }, [collapseOnSummonKey]);
+
+  useEffect(() => {
+    const expandTriggerChanged = expandOnTaskStartKey !== lastExpandTriggerRef.current;
+    lastExpandTriggerRef.current = expandOnTaskStartKey;
+
+    if (!expandTriggerChanged || !activeTaskId) return;
     const frame = window.requestAnimationFrame(() => {
       setIsExpanded(true);
     });
@@ -446,7 +457,7 @@ export function DynamicIsland({
         <div
           role="button"
           tabIndex={0}
-          className="group relative w-[352px] rounded-[18px] border border-white/12 bg-black/88 px-4 py-3 text-left shadow-[0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl"
+          className="dynamic-island group relative w-[352px] overflow-hidden rounded-[999px] border border-white/12 bg-[rgba(9,11,14,0.9)] px-4 py-3 text-left shadow-[0_20px_55px_rgba(0,0,0,0.46),0_0_30px_rgba(110,231,183,0.15),inset_0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-[20px]"
           onClick={() => setActiveTask(activeOrPausedTasks[0].id)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
@@ -455,15 +466,17 @@ export function DynamicIsland({
             }
           }}
         >
-          <motion.div
+          <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-[-2px] rounded-[20px] bg-[conic-gradient(from_0deg_at_50%_50%,rgba(138,255,222,0.08)_0deg,rgba(63,255,213,0.82)_70deg,rgba(199,255,245,0.36)_128deg,rgba(14,121,90,0.88)_205deg,rgba(40,255,210,0.62)_290deg,rgba(138,255,222,0.08)_360deg)] opacity-90 blur-[10px]"
-            animate={{ rotate: 360 }}
-            transition={{ duration: 12, repeat: Infinity, ease: 'linear' }}
+            className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.08),rgba(255,255,255,0))]"
           />
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 rounded-[18px] border border-emerald-300/35 shadow-[0_0_18px_rgba(63,255,213,0.28),0_0_34px_rgba(41,230,200,0.14)]"
+            className="pointer-events-none absolute inset-y-0 left-0 w-[45%] bg-[linear-gradient(to_right,rgba(110,231,183,0.16),rgba(110,231,183,0))]"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-[1px] rounded-[999px] border border-white/6"
           />
           <div
             data-tauri-drag-region
@@ -479,9 +492,9 @@ export function DynamicIsland({
               void handleCloseIsland();
             }}
             className="absolute right-2 top-2 z-20 flex h-6 w-6 items-center justify-center rounded-[6px] border border-orange-300/70 bg-orange-500/85 text-sm font-bold text-white opacity-0 scale-90 transition-all hover:bg-orange-400 group-hover:opacity-100 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:scale-100"
-            aria-label="关闭灵动岛"
+            aria-label="Close island"
           >
-            ×
+            x
           </button>
           <div className="flex items-center gap-2.5">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center">
@@ -507,19 +520,21 @@ export function DynamicIsland({
             onRequestCreate?.();
           }
         }}
-        className="group relative w-[352px] rounded-[18px] border border-white/12 bg-black/88 px-4 py-3 text-left shadow-[0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl"
+        className="dynamic-island group relative w-[352px] overflow-hidden rounded-[999px] border border-white/12 bg-[rgba(9,11,14,0.9)] px-4 py-3 text-left shadow-[0_20px_55px_rgba(0,0,0,0.46),0_0_30px_rgba(110,231,183,0.15),inset_0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-[20px]"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
       >
-        <motion.div
+        <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-[-2px] rounded-[20px] bg-[conic-gradient(from_0deg_at_50%_50%,rgba(138,255,222,0.08)_0deg,rgba(63,255,213,0.82)_70deg,rgba(199,255,245,0.36)_128deg,rgba(14,121,90,0.88)_205deg,rgba(40,255,210,0.62)_290deg,rgba(138,255,222,0.08)_360deg)] opacity-90 blur-[10px]"
-          animate={{ rotate: 360 }}
-          transition={{ duration: 12, repeat: Infinity, ease: 'linear' }}
+          className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.08),rgba(255,255,255,0))]"
         />
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 rounded-[18px] border border-emerald-300/35 shadow-[0_0_18px_rgba(63,255,213,0.28),0_0_34px_rgba(41,230,200,0.14)]"
+          className="pointer-events-none absolute inset-y-0 left-0 w-[45%] bg-[linear-gradient(to_right,rgba(110,231,183,0.16),rgba(110,231,183,0))]"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-[1px] rounded-[999px] border border-white/6"
         />
         <div
           data-tauri-drag-region
@@ -535,9 +550,9 @@ export function DynamicIsland({
             void handleCloseIsland();
           }}
           className="absolute right-2 top-2 z-20 flex h-6 w-6 items-center justify-center rounded-[6px] border border-orange-300/70 bg-orange-500/85 text-sm font-bold text-white opacity-0 scale-90 transition-all hover:bg-orange-400 group-hover:opacity-100 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:scale-100"
-          aria-label="关闭灵动岛"
+          aria-label="Close island"
         >
-          ×
+          x
         </button>
           <div className="flex items-center gap-2.5">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center">
@@ -619,3 +634,4 @@ export function DynamicIsland({
     </div>
   );
 }
+

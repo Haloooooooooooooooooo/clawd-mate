@@ -209,9 +209,11 @@ export default function DailyReportView() {
     }
   }, [searchParams, selectedDate]);
 
-  const handleGenerateReport = async (trigger: 'manual' | 'autogen' = 'manual') => {
+  const handleGenerateReport = async (
+    trigger: 'manual' | 'autogen' = 'manual'
+  ): Promise<{ started: boolean; blockedReason?: 'login_required' | 'missing_record' | 'limit_reached' }> => {
     if (isGeneratingRef.current) {
-      return;
+      return { started: false };
     }
 
     const eligibility = getDailyReportEligibility({
@@ -227,7 +229,7 @@ export default function DailyReportView() {
       if (eligibility.reason === 'login_required') {
         openLoginModal();
       }
-      return;
+      return { started: false, blockedReason: eligibility.reason };
     }
 
     isGeneratingRef.current = true;
@@ -261,6 +263,8 @@ export default function DailyReportView() {
       isGeneratingRef.current = false;
       setIsGenerating(false);
     }
+
+    return { started: true };
   };
 
   useEffect(() => {
@@ -278,14 +282,26 @@ export default function DailyReportView() {
       return;
     }
 
-    handledAutogenRef.current = autogenKey;
+    void (async () => {
+      const result = await handleGenerateReport('autogen');
+      if (!result.started && result.blockedReason !== 'limit_reached') {
+        handledAutogenRef.current = null;
+        return;
+      }
 
-    void handleGenerateReport('autogen').finally(() => {
+      handledAutogenRef.current = autogenKey;
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete('autogen');
       setSearchParams(nextParams, { replace: true });
-    });
-  }, [searchParams, selectedDate, setSearchParams]);
+    })();
+  }, [
+    searchParams,
+    selectedDate,
+    selectedRecord,
+    isLoggedIn,
+    user?.id,
+    setSearchParams
+  ]);
 
   const handleDownloadReport = () => {
     if (!generatedImageUrl) return;
@@ -302,17 +318,19 @@ export default function DailyReportView() {
           <h3 className="font-display text-4xl text-ink font-bold leading-tight">每日复盘</h3>
         </div>
         <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              void handleGenerateReport('manual');
-            }}
-            disabled={isGenerating}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-border-main rounded-xl text-xs font-bold hover:bg-stone-50 transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <RefreshCw size={14} className={isGenerating ? 'animate-spin' : ''} />
-            重新生成
-          </button>
+          {generatedImageUrl ? (
+            <button
+              type="button"
+              onClick={() => {
+                void handleGenerateReport('manual');
+              }}
+              disabled={isGenerating}
+              className="flex items-center gap-2 px-4 py-2 bg-white border border-border-main rounded-xl text-xs font-bold hover:bg-stone-50 transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <RefreshCw size={14} className={isGenerating ? 'animate-spin' : ''} />
+              重新生成
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={handleDownloadReport}
