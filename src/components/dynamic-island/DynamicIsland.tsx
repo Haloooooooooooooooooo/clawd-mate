@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTaskStore } from '../../stores/taskStore';
 import { useReminder } from '../../hooks/useReminder';
 import { pushTaskFromIsland } from '../../lib/islandBridge';
@@ -130,6 +131,22 @@ export function DynamicIsland({
   });
   const currentPetStatus = getPetStatus();
   const currentPetScaleMultiplier = currentPetStatus === 'working' ? 1.22 : 1;
+
+  const handleDragMouseDown = async (event: React.MouseEvent<HTMLElement>) => {
+    if (event.button !== 0) return;
+
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+    if (target.closest('button, input, textarea, select, a, [data-no-drag="true"]')) {
+      return;
+    }
+
+    try {
+      await getCurrentWindow().startDragging();
+    } catch {
+      // Ignore browser-only mode or denied environments.
+    }
+  };
 
   useEffect(() => {
     if (!recentCelebrationAt) return;
@@ -446,7 +463,9 @@ export function DynamicIsland({
         <div
           role="button"
           tabIndex={0}
+          data-tauri-drag-region
           className="group relative w-[352px] rounded-[18px] border border-white/12 bg-black/88 px-4 py-3 text-left shadow-[0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl"
+          onMouseDown={handleDragMouseDown}
           onClick={() => setActiveTask(activeOrPausedTasks[0].id)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
@@ -457,6 +476,7 @@ export function DynamicIsland({
         >
           <button
             type="button"
+            data-no-drag="true"
             onClick={(event) => {
               event.stopPropagation();
               void handleCloseIsland();
@@ -483,6 +503,8 @@ export function DynamicIsland({
       <motion.div
         role="button"
         tabIndex={0}
+        data-tauri-drag-region
+        onMouseDown={handleDragMouseDown}
         onClick={onRequestCreate}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {
@@ -496,6 +518,7 @@ export function DynamicIsland({
       >
         <button
           type="button"
+          data-no-drag="true"
           onClick={(event) => {
             event.stopPropagation();
             void handleCloseIsland();

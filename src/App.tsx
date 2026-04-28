@@ -334,10 +334,12 @@ function App() {
 
         const currentPosition = await currentWindow.outerPosition();
         const currentSize = await currentWindow.outerSize();
-        const nextY = monitor.position.y;
-        const estimatedCenteredX =
-          monitor.position.x + Math.round((monitor.size.width - currentSize.width) / 2);
-        const nextMeta = { width: nextWidth, height: nextHeight, x: estimatedCenteredX, y: nextY };
+        const nextMeta = {
+          width: nextWidth,
+          height: nextHeight,
+          x: currentPosition.x,
+          y: currentPosition.y
+        };
         const lastApplied = lastAppliedRef.current;
         const shouldResize =
           !lastApplied ||
@@ -349,16 +351,15 @@ function App() {
           await currentWindow.setSize(new dpiApi.LogicalSize(nextWidth, nextHeight));
         }
         const resizedSize = shouldResize ? await currentWindow.outerSize() : currentSize;
-        const recenteredX = monitor.position.x + Math.round((monitor.size.width - resizedSize.width) / 2);
         const shouldReposition =
           !lastApplied ||
-          lastApplied.x !== recenteredX ||
-          lastApplied.y !== nextY ||
-          currentPosition.x !== recenteredX ||
-          currentPosition.y !== nextY;
+          lastApplied.x !== nextMeta.x ||
+          lastApplied.y !== nextMeta.y ||
+          currentPosition.x !== nextMeta.x ||
+          currentPosition.y !== nextMeta.y;
 
         if (shouldReposition) {
-          await currentWindow.setPosition(new dpiApi.PhysicalPosition(recenteredX, nextY));
+          await currentWindow.setPosition(new dpiApi.PhysicalPosition(nextMeta.x, nextMeta.y));
         }
 
         const actualPosition = shouldReposition ? await currentWindow.outerPosition() : currentPosition;
@@ -366,8 +367,8 @@ function App() {
         lastAppliedRef.current = {
           width: nextWidth,
           height: nextHeight,
-          x: recenteredX,
-          y: nextY
+          x: nextMeta.x,
+          y: nextMeta.y
         };
         console.log(
           '[island-window]',
@@ -405,6 +406,7 @@ function App() {
       <div className="relative mx-auto flex w-full flex-col items-center pt-0 px-0">
         <div
           ref={islandShellRef}
+          data-tauri-drag-region
           className={`pointer-events-auto inline-flex flex-col gap-2 ${
             layoutMode === 'collapsed' ? 'items-end' : 'items-center'
           }`}

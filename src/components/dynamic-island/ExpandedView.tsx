@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { Pause, Play, CheckCircle2, X } from 'lucide-react'
 import { PetSprite, type PetStatus } from '@pet'
 import type { Task } from '../../types/task'
@@ -65,9 +66,27 @@ export function ExpandedView({
   const displayElapsed = Math.floor(task.actualDuration / 60)
   const otherTasks = tasks.filter((item) => item.id !== task.id && item.status !== 'completed')
 
+  const handleDragMouseDown = async (event: React.MouseEvent<HTMLElement>) => {
+    if (event.button !== 0) return
+
+    const target = event.target as HTMLElement | null
+    if (!target) return
+    if (target.closest('button, input, textarea, select, a, [data-no-drag="true"]')) {
+      return
+    }
+
+    try {
+      await getCurrentWindow().startDragging()
+    } catch {
+      // Ignore browser-only mode or denied environments.
+    }
+  }
+
   return (
     <motion.div
+      data-tauri-drag-region
       className="w-[460px]"
+      onMouseDown={handleDragMouseDown}
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
@@ -94,6 +113,7 @@ export function ExpandedView({
             </div>
             <button
               type="button"
+              data-no-drag="true"
               onClick={onCollapse}
               className="rounded-full border border-white/10 bg-white/8 px-3 py-1 text-[11px] text-white/70 transition-colors hover:bg-white/14"
             >
@@ -122,6 +142,7 @@ export function ExpandedView({
               <div className="mt-2 flex gap-2">
                 <button
                   type="button"
+                  data-no-drag="true"
                   onClick={onComplete}
                   className="flex flex-[2] items-center justify-center gap-1.5 rounded-[12px] bg-emerald-500 py-2 text-[12px] font-medium text-white transition-colors hover:bg-emerald-400"
                 >
@@ -130,6 +151,7 @@ export function ExpandedView({
                 </button>
                 <button
                   type="button"
+                  data-no-drag="true"
                   onClick={() => onExtend(5)}
                   className="flex flex-1 flex-col items-center justify-center rounded-[12px] border border-white/10 bg-white/8 py-2 text-[12px] text-white/75 transition-colors hover:bg-white/14"
                 >
@@ -138,6 +160,7 @@ export function ExpandedView({
                 </button>
                 <button
                   type="button"
+                  data-no-drag="true"
                   onClick={() => onExtend(10)}
                   className="flex flex-1 flex-col items-center justify-center rounded-[12px] border border-white/10 bg-white/8 py-2 text-[12px] text-white/75 transition-colors hover:bg-white/14"
                 >
@@ -149,6 +172,7 @@ export function ExpandedView({
               <div className="mt-3 flex gap-2">
                 <button
                   type="button"
+                  data-no-drag="true"
                   onClick={isRunning ? onPause : onResume}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-[12px] border border-white/10 bg-white/8 py-2 text-[12px] font-medium text-white/85 transition-colors hover:bg-white/15"
                 >
@@ -161,6 +185,7 @@ export function ExpandedView({
                 </button>
                 <button
                   type="button"
+                  data-no-drag="true"
                   onClick={onComplete}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-[12px] border border-white/10 bg-white/8 py-2 text-[12px] font-medium text-white/85 transition-colors hover:bg-white/15"
                 >
@@ -169,6 +194,7 @@ export function ExpandedView({
                 </button>
                 <button
                   type="button"
+                  data-no-drag="true"
                   onClick={onCancel}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-[12px] border border-red-400/30 bg-red-500/10 py-2 text-[12px] font-medium text-red-400 transition-colors hover:bg-red-500/20"
                 >
@@ -214,6 +240,7 @@ export function ExpandedView({
           <section className="grid grid-cols-2 gap-2">
             <button
               type="button"
+              data-no-drag="true"
               onClick={onAddTask}
               className="rounded-[12px] border border-white/10 bg-white/8 px-3 py-2 text-[12px] text-white/80 transition-colors hover:bg-white/14"
             >
@@ -221,6 +248,7 @@ export function ExpandedView({
             </button>
             <button
               type="button"
+              data-no-drag="true"
               onClick={onGoHome}
               className="rounded-[12px] border border-white/10 bg-white/8 px-3 py-2 text-[12px] text-white/80 transition-colors hover:bg-white/14"
             >

@@ -15,6 +15,19 @@ use std::thread;
 use tauri::{AppHandle, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
 use tauri::Url;
 
+fn position_main_window_at_top_center(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    if let Some(monitor) = window.current_monitor()? {
+        let monitor_size = monitor.size();
+        let monitor_position = monitor.position();
+        let window_size = window.outer_size()?;
+        let centered_x =
+            monitor_position.x + ((monitor_size.width.saturating_sub(window_size.width)) / 2) as i32;
+        window.set_position(PhysicalPosition::new(centered_x, monitor_position.y))?;
+    }
+
+    Ok(())
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 enum SubtaskSyncPayload {
@@ -187,6 +200,7 @@ fn handle_bridge_request(stream: TcpStream, app: &AppHandle, state: &BridgeState
         }
         ("POST", "/island/show") => {
             if let Some(window) = window {
+                let _ = position_main_window_at_top_center(&window);
                 let _ = window.show();
             }
             state.island_visible.store(true, Ordering::Relaxed);
@@ -203,6 +217,7 @@ fn handle_bridge_request(stream: TcpStream, app: &AppHandle, state: &BridgeState
             let next = !state.island_visible.load(Ordering::Relaxed);
             if let Some(window) = window {
                 if next {
+                    let _ = position_main_window_at_top_center(&window);
                     let _ = window.show();
                 } else {
                     let _ = window.hide();
@@ -618,12 +633,7 @@ pub fn run() {
             let bridge_state = BridgeState::default();
             let dashboard_url = Url::parse("http://127.0.0.1:5173").expect("invalid dashboard dev url");
 
-            if let Some(monitor) = window.current_monitor()? {
-                let monitor_size = monitor.size();
-                let window_size = window.outer_size()?;
-                let centered_x = ((monitor_size.width.saturating_sub(window_size.width)) / 2) as i32;
-                window.set_position(PhysicalPosition::new(centered_x, 0))?;
-            }
+            position_main_window_at_top_center(&window)?;
 
             window.show()?;
             bridge_state.island_visible.store(true, Ordering::Relaxed);
