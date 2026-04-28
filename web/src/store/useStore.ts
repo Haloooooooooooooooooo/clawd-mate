@@ -158,7 +158,7 @@ interface AppState {
   clearToast: () => void;
   getDailyReportGenerationCount: (date: string, userId?: string | null) => number;
   incrementDailyReportGenerationCount: (date: string, userId?: string | null) => void;
-  hydrateCloudData: (userId: string) => Promise<void>;
+  hydrateCloudData: (userId: string, options?: { guestHistoryToImport?: DailyRecord[] }) => Promise<void>;
   syncCloudData: (options?: { historyOnly?: boolean }) => Promise<void>;
   toggleIsland: () => void;
   setIslandVisible: (visible: boolean) => void;
@@ -849,21 +849,30 @@ export const useStore = create<AppState>()(
           };
         }),
 
-      hydrateCloudData: async (userId) => {
+      hydrateCloudData: async (userId, options) => {
         const snapshot = await loadCloudSnapshot(userId);
-        const current = get();
-        const mergedHistory = mergeHistoryRecords(current.history, snapshot.history);
+        const guestHistory = Array.isArray(options?.guestHistoryToImport) ? options.guestHistoryToImport : [];
+        const mergedHistory = guestHistory.length > 0
+          ? mergeHistoryRecords(guestHistory, snapshot.history)
+          : snapshot.history;
 
         set((state) => ({
           ...state,
-          // Hard rule: local active tasks remain local; cloud stores history only.
-          tasks: state.tasks,
+          // Strict account isolation: authenticated sessions only show the account snapshot,
+          // optionally plus guest history explicitly imported during this login.
+          tasks: [],
           history: mergedHistory,
-          activeTaskId: state.activeTaskId,
-          closedSyncIds: {}
+          activeTaskId: null,
+          closedSyncIds: {},
+          lastTaskSyncAtById: {},
+          localStatusLockBySyncId: {},
+          lastFocusSyncAt: 0,
+          lastBridgeSyncAt: 0
         }));
 
-        queueCloudSync({ historyOnly: true });
+        if (guestHistory.length > 0) {
+          queueCloudSync({ historyOnly: true });
+        }
       },
 
       syncCloudData: async (options) => {

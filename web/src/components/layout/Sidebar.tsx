@@ -89,9 +89,11 @@ export default function Sidebar() {
       }
       try {
         const uiUser = toUiUser(data.session.user);
+        const previousState = useStore.getState();
+        const guestHistoryToImport = previousState.isLoggedIn ? [] : previousState.history;
         setLoggedIn(true, uiUser);
         if (uiUser.id) {
-          await hydrateCloudData(uiUser.id);
+          await hydrateCloudData(uiUser.id, { guestHistoryToImport });
         }
       } catch (syncError) {
         console.error('[auth bootstrap] failed to hydrate cloud data', syncError);
@@ -108,9 +110,11 @@ export default function Sidebar() {
         return;
       }
       const uiUser = toUiUser(session.user);
+      const previousState = useStore.getState();
+      const guestHistoryToImport = previousState.isLoggedIn ? [] : previousState.history;
       setLoggedIn(true, uiUser);
       if (uiUser.id) {
-        void hydrateCloudData(uiUser.id).catch((syncError) => {
+        void hydrateCloudData(uiUser.id, { guestHistoryToImport }).catch((syncError) => {
           console.error('[auth state] failed to hydrate cloud data', syncError);
         });
       }
@@ -214,21 +218,14 @@ export default function Sidebar() {
           return;
         }
       } else {
-        const { data, error } = await supabase.auth.signInWithPassword({
+        const { error } = await supabase.auth.signInWithPassword({
           email: authEmail.trim(),
           password: authPassword
         });
         if (error) throw error;
-        if (data.user) {
-          const uiUser = toUiUser(data.user);
-          setLoggedIn(true, uiUser);
-          if (uiUser.id) {
-            await hydrateCloudData(uiUser.id);
-          }
-          closeLoginModal();
-          resetAuthForm();
-          return;
-        }
+        resetAuthForm();
+        closeLoginModal();
+        return;
       }
     } catch (error) {
       const rawMessage = error instanceof Error && error.message ? error.message : '';

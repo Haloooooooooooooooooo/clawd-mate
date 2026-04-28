@@ -5,8 +5,9 @@
 
 ## 当前优先级
 
-1. `P1` 灵动岛窗口问题
-2. `P2` 日报生图体验优化
+1. `P1` 桌宠动画嵌入灵动岛和 Dashboard
+2. `P2` 灵动岛窗口问题
+3. `P3` 日报生图体验优化
 
 说明：
 - 日报生图链路已经基本打通，当前更多是平台限流/超时问题，不再是主阻塞。
@@ -184,7 +185,32 @@
 
 ## 当前主要问题
 
-### P1：灵动岛窗口容器过大，挡住背后操作
+### P1：桌宠动画嵌入灵动岛和 Dashboard
+
+**目标**：将桌宠动画组件嵌入到灵动岛和 Dashboard，根据任务状态自动切换动画。
+
+**任务清单**：
+
+| # | 任务 | 状态 | 相关文件 |
+|---|------|------|----------|
+| 1 | 在 DynamicIsland 中实现 `getPetStatus()` 状态判断逻辑 | ⏳ 待完成 | `src/components/dynamic-island/DynamicIsland.tsx` |
+| 2 | 在 DynamicIsland 中实现 celebrate 触发与自动恢复 | ⏳ 待完成 | `src/components/dynamic-island/DynamicIsland.tsx` |
+| 3 | 替换灵动岛无任务时的 🦀 emoji 为 PetSprite | ⏳ 待完成 | `src/components/dynamic-island/DynamicIsland.tsx` |
+| 4 | 替换灵动岛有暂停任务时的 🦀 emoji 为 PetSprite | ⏳ 待完成 | `src/components/dynamic-island/DynamicIsland.tsx` |
+| 5 | 在 Dashboard 中实现 `getPetStatus()` 状态判断逻辑 | ⏳ 待完成 | `web/src/pages/Dashboard.tsx` |
+| 6 | 在 Dashboard 中实现 celebrate 触发与自动恢复 | ⏳ 待完成 | `web/src/pages/Dashboard.tsx` |
+| 7 | 替换 Dashboard 打招呼旁边的静态图片为 PetSprite | ⏳ 待完成 | `web/src/pages/Dashboard.tsx` |
+| 8 | 测试各状态切换是否正常 | ⏳ 待完成 | - |
+
+**状态逻辑**：
+- `idle`（睡觉）：无任务 / 所有任务暂停
+- `working`（敲键盘）：有任务正在进行
+- `alert`（举牌感叹号）：有任务超时
+- `celebrate`（撒星星）：用户完成任务后短暂显示，1.5秒后恢复
+
+**详细方案**：见 `pet/README.md`
+
+### P2：灵动岛窗口容器过大，挡住背后操作
 现象：
 - 透明或白色大框很大
 - 收起态还好，一展开就很明显
@@ -193,10 +219,10 @@
 
 根因判断：
 - `tauri.conf.json` 初始窗口是固定大尺寸
-- 前端虽然尝试过内容测量，但没有把“当前可见内容尺寸”真正作为唯一窗口尺寸来源
+- 前端虽然尝试过内容测量，但没有把”当前可见内容尺寸”真正作为唯一窗口尺寸来源
 - 透明区域并没有实现真正可靠的 click-through
 
-### P2：日报生图虽然能请求，但平台不稳定
+### P3：日报生图虽然能请求，但平台不稳定
 现象：
 - 可能报 `524`
 - 可能报图片输入限流
@@ -249,6 +275,12 @@
 ---
 
 ## 当前关键文件
+
+### 桌宠动画
+- `pet/README.md` - 完整方案文档
+- `pet/PetSprite.tsx` - 桌宠精灵动画组件
+- `pet/config.ts` - 动画配置
+- `web/public/pet/sprites/` - 帧图资源
 
 ### 灵动岛
 - `src-tauri/tauri.conf.json`

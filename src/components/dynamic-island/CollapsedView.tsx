@@ -40,7 +40,7 @@ export function CollapsedView({
     <motion.div
       role="button"
       tabIndex={0}
-      className="group relative w-[392px] cursor-pointer"
+      className="group relative w-[352px] cursor-pointer"
       onClick={onExpand}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -65,15 +65,15 @@ export function CollapsedView({
         ×
       </button>
 
-      <div className="rounded-[18px] border border-white/10 bg-black/90 px-3 py-2.5 shadow-[0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl">
-        <div className="flex items-center gap-2.5">
-          <motion.div
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 via-rose-500 to-orange-400 text-base shadow-[0_8px_24px_rgba(244,114,182,0.35)]"
-            animate={{ rotate: [0, -4, 4, 0] }}
-            transition={{ duration: 2.6, repeat: Infinity, repeatDelay: 3 }}
-          >
-            🦀
-          </motion.div>
+        <div className="rounded-[18px] border border-white/10 bg-black/90 px-3 py-2 shadow-[0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl">
+          <div className="flex items-center gap-2.5">
+            <motion.div
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 via-rose-500 to-orange-400 text-xl shadow-[0_8px_24px_rgba(244,114,182,0.35)]"
+              animate={{ rotate: [0, -4, 4, 0] }}
+              transition={{ duration: 2.6, repeat: Infinity, repeatDelay: 3 }}
+            >
+              🦀
+            </motion.div>
 
           <div className="min-w-0 flex-1">
             <div className="mb-1.5 flex items-center justify-between gap-2">
@@ -82,10 +82,12 @@ export function CollapsedView({
                 {elapsedMinutes}/{plannedMinutes}min
               </div>
             </div>
-            <div className="mb-1 text-[11px] text-white/60">
+            <div className="-mt-1 mb-0.5 text-[11px] text-white/60">
               {isOvertime ? '时间到！' : `剩余 ${remainingMinutes}:${remainingRemainSeconds.toString().padStart(2, '0')}`}
             </div>
-            <ProgressBar progress={progress} className="h-1.5" />
+            <div className="-mt-0.5">
+              <ProgressBar progress={progress} className="h-1.5 w-[88%]" />
+            </div>
           </div>
 
           <AnimatePresence>

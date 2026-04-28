@@ -44,8 +44,8 @@ function normalizeBridgeSubtasks(
   );
 }
 
-const COLLAPSED_WIDTH = 392;
-const COLLAPSED_HEIGHT = 90;
+const COLLAPSED_WIDTH = 352;
+const COLLAPSED_HEIGHT = 84;
 const EXPANDED_WIDTH = 460;
 const EXPANDED_ISLAND_HEIGHT = 620;
 const COMPOSER_WINDOW_HEIGHT = 560;
@@ -302,7 +302,14 @@ function App() {
           return;
         }
 
-        const nextWidth = useExpandedWindow ? EXPANDED_WIDTH : COLLAPSED_WIDTH;
+        const measuredWidth = islandShellRef.current
+          ? Math.ceil(islandShellRef.current.getBoundingClientRect().width)
+          : 0;
+        const nextWidth = useExpandedWindow
+          ? EXPANDED_WIDTH
+          : layoutMode === 'idle'
+            ? Math.max(280, measuredWidth || COLLAPSED_WIDTH)
+            : COLLAPSED_WIDTH;
         const fallbackHeight =
           composerOpen && isIslandExpanded
             ? STACKED_WINDOW_HEIGHT
@@ -317,7 +324,9 @@ function App() {
           : 0;
         const nextHeight = useExpandedWindow
           ? Math.max(COLLAPSED_HEIGHT, measuredHeight || fallbackHeight)
-          : COLLAPSED_HEIGHT;
+          : layoutMode === 'idle'
+            ? Math.max(56, measuredHeight || COLLAPSED_HEIGHT)
+            : COLLAPSED_HEIGHT;
 
         const currentPosition = await currentWindow.outerPosition();
         const currentSize = await currentWindow.outerSize();
@@ -335,7 +344,6 @@ function App() {
         if (shouldResize) {
           await currentWindow.setSize(new dpiApi.LogicalSize(nextWidth, nextHeight));
         }
-
         const resizedSize = shouldResize ? await currentWindow.outerSize() : currentSize;
         const recenteredX = monitor.position.x + Math.round((monitor.size.width - resizedSize.width) / 2);
         const shouldReposition =

@@ -396,7 +396,7 @@ export function DynamicIsland({
         <div
           role="button"
           tabIndex={0}
-          className="group relative w-full max-w-[408px] rounded-[18px] border border-white/12 bg-black/88 px-4 py-3 text-left shadow-[0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl"
+          className="group relative w-[352px] rounded-[18px] border border-white/12 bg-black/88 px-4 py-3 text-left shadow-[0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl"
           onClick={() => setActiveTask(activeOrPausedTasks[0].id)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
@@ -440,7 +440,7 @@ export function DynamicIsland({
             onRequestCreate?.();
           }
         }}
-        className="group relative w-full max-w-[408px] rounded-[18px] border border-white/12 bg-black/88 px-4 py-3 text-left shadow-[0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl"
+        className="group relative w-[352px] rounded-[18px] border border-white/12 bg-black/88 px-4 py-3 text-left shadow-[0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
       >
@@ -511,9 +511,9 @@ export function DynamicIsland({
         ) : (
           <motion.div
             key="collapsed-wrapper"
-            initial={{ width: 392 }}
-            animate={{ width: 392 }}
-            exit={{ width: 392 }}
+            initial={{ width: 352 }}
+            animate={{ width: 352 }}
+            exit={{ width: 352 }}
             transition={{ duration: 0 }}
             className="flex"
           >
