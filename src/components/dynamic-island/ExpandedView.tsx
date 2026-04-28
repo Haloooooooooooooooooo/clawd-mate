@@ -1,5 +1,4 @@
 import { motion } from 'framer-motion'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import { Pause, Play, CheckCircle2, X } from 'lucide-react'
 import { PetSprite, type PetStatus } from '@pet'
 import type { Task } from '../../types/task'
@@ -66,34 +65,31 @@ export function ExpandedView({
   const displayElapsed = Math.floor(task.actualDuration / 60)
   const otherTasks = tasks.filter((item) => item.id !== task.id && item.status !== 'completed')
 
-  const handleDragMouseDown = async (event: React.MouseEvent<HTMLElement>) => {
-    if (event.button !== 0) return
-
-    const target = event.target as HTMLElement | null
-    if (!target) return
-    if (target.closest('button, input, textarea, select, a, [data-no-drag="true"]')) {
-      return
-    }
-
-    try {
-      await getCurrentWindow().startDragging()
-    } catch {
-      // Ignore browser-only mode or denied environments.
-    }
-  }
-
   return (
     <motion.div
-      data-tauri-drag-region
       className="w-[460px]"
-      onMouseDown={handleDragMouseDown}
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.2 }}
     >
-      <div className="rounded-[22px] border border-white/12 bg-black/90 shadow-[0_24px_80px_rgba(0,0,0,0.52)] backdrop-blur-2xl">
+      <div className="relative">
+        <motion.div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-[-3px] rounded-[24px] bg-[conic-gradient(from_0deg_at_50%_50%,rgba(138,255,222,0.08)_0deg,rgba(63,255,213,0.84)_62deg,rgba(214,255,245,0.38)_126deg,rgba(14,121,90,0.88)_208deg,rgba(50,255,206,0.64)_302deg,rgba(138,255,222,0.08)_360deg)] opacity-90 blur-[12px]"
+          animate={{ rotate: 360 }}
+          transition={{ duration: 14, repeat: Infinity, ease: 'linear' }}
+        />
+        <div className="pointer-events-none absolute inset-0 rounded-[22px] border border-emerald-300/35 shadow-[0_0_20px_rgba(63,255,213,0.3),0_0_36px_rgba(41,230,200,0.14)]" />
+        <div className="rounded-[22px] border border-emerald-200/18 bg-[radial-gradient(circle_at_14%_18%,rgba(88,255,223,0.12),transparent_28%),linear-gradient(180deg,rgba(11,18,23,0.96)_0%,rgba(5,11,16,0.96)_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.52)] backdrop-blur-2xl">
         <div className="h-full overflow-visible px-3 pb-3 pt-2">
+          <div className="mb-2 flex justify-center">
+            <div
+              data-tauri-drag-region
+              className="h-1.5 w-16 rounded-full bg-white/12 cursor-grab active:cursor-grabbing"
+              aria-hidden="true"
+            />
+          </div>
           <div
             className="sticky top-0 z-10 mb-2 flex items-center justify-between rounded-[14px] bg-black/88 px-2 py-2 backdrop-blur-2xl"
             onClick={(event) => {
@@ -256,6 +252,7 @@ export function ExpandedView({
             </button>
           </section>
         </div>
+      </div>
       </div>
     </motion.div>
   )

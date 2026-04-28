@@ -112,6 +112,9 @@ export default function Dashboard() {
       ? 'working'
       : 'idle';
   const dashboardPetScaleMultiplier = dashboardPetStatus === 'working' ? 2.45 : 1.95;
+  const currentHour = new Date(nowTick).getHours();
+  const greeting = currentHour < 12 ? '早上好' : currentHour < 18 ? '下午好' : '晚上好';
+  const greetingText = user?.name?.trim() ? `${greeting}，${user.name.trim()}` : greeting;
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -248,7 +251,7 @@ export default function Dashboard() {
               <PetSprite status={dashboardPetStatus} size="lg" scaleMultiplier={dashboardPetScaleMultiplier} />
             </div>
             <div className="space-y-1">
-              <h2 className="font-display text-5xl font-bold text-ink tracking-tight">早上好，Alex</h2>
+              <h2 className="font-display text-5xl font-bold text-ink tracking-tight">{greetingText}</h2>
               <p className="text-lg text-muted-text opacity-80 italic font-medium">Clawd已经准备就绪，开始今天的任务吧！</p>
             </div>
           </header>

@@ -9,7 +9,6 @@ import { AnimatePresence, motion } from 'motion/react';
 import Sidebar from './components/layout/Sidebar';
 import Dashboard from './pages/Dashboard';
 import DailyReportView from './pages/DailyReportView';
-import PetPreviewPage from './pages/PetPreview';
 import { HistoryCardView } from './components/history/HistoryViews';
 import { pullTasksForWeb } from './lib/islandBridge';
 import { useStore } from './store/useStore';
@@ -60,7 +59,7 @@ export default function App() {
             initial={{ opacity: 0, y: -16, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -12, scale: 0.98 }}
-            className="fixed top-5 left-1/2 z-[120] -translate-x-1/2 rounded-2xl border border-border-main bg-white px-4 py-3 text-sm font-medium text-ink shadow-[0_12px_30px_rgba(120,90,56,0.14)]"
+            className="fixed top-5 left-1/2 z-[120] -translate-x-1/2 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700 shadow-[0_12px_30px_rgba(16,185,129,0.25)]"
           >
             {toast.message}
           </motion.div>
@@ -77,7 +76,6 @@ export default function App() {
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/history" element={<HistoryCardView />} />
                 <Route path="/report" element={<DailyReportView />} />
-                <Route path="/pet" element={<PetPreviewPage />} />
               </Routes>
             </main>
           </div>

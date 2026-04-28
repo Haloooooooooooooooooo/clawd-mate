@@ -11,22 +11,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useStore } from '../../store/useStore';
 import { getIslandState } from '../../lib/islandBridge';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
-import type { User as SupabaseUser } from '@supabase/supabase-js';
-
-function toUiUser(user: SupabaseUser) {
-  const email = user.email || 'unknown@example.com';
-  const displayName =
-    typeof user.user_metadata?.display_name === 'string' && user.user_metadata.display_name.trim().length > 0
-      ? user.user_metadata.display_name.trim()
-      : email.split('@')[0];
-  const avatar = displayName.slice(0, 2).toUpperCase();
-  return {
-    id: user.id,
-    name: displayName,
-    email,
-    avatar
-  };
-}
+import { getUserWithProfile, upsertUserProfile } from '../../lib/profileRepository';
 
 export default function Sidebar() {
   const [showLogout, setShowLogout] = useState(false);
@@ -48,7 +33,8 @@ export default function Sidebar() {
     setIslandVisible,
     isLoginModalOpen,
     openLoginModal,
-    closeLoginModal
+    closeLoginModal,
+    showToast
   } = useStore();
 
   useEffect(() => {
@@ -88,7 +74,8 @@ export default function Sidebar() {
         return;
       }
       try {
-        const uiUser = toUiUser(data.session.user);
+        const uiUser = await getUserWithProfile(data.session.user);
+        await upsertUserProfile(data.session.user, uiUser.name);
         const previousState = useStore.getState();
         const guestHistoryToImport = previousState.isLoggedIn ? [] : previousState.history;
         setLoggedIn(true, uiUser);
@@ -109,15 +96,20 @@ export default function Sidebar() {
         setLoggedIn(false, null, { clearDataOnLogout: shouldClear });
         return;
       }
-      const uiUser = toUiUser(session.user);
-      const previousState = useStore.getState();
-      const guestHistoryToImport = previousState.isLoggedIn ? [] : previousState.history;
-      setLoggedIn(true, uiUser);
-      if (uiUser.id) {
-        void hydrateCloudData(uiUser.id, { guestHistoryToImport }).catch((syncError) => {
+      void (async () => {
+        try {
+          const uiUser = await getUserWithProfile(session.user);
+          await upsertUserProfile(session.user, uiUser.name);
+          const previousState = useStore.getState();
+          const guestHistoryToImport = previousState.isLoggedIn ? [] : previousState.history;
+          setLoggedIn(true, uiUser);
+          if (uiUser.id) {
+            await hydrateCloudData(uiUser.id, { guestHistoryToImport });
+          }
+        } catch (syncError) {
           console.error('[auth state] failed to hydrate cloud data', syncError);
-        });
-      }
+        }
+      })();
     });
 
     return () => {
@@ -130,7 +122,6 @@ export default function Sidebar() {
     { name: '今日任务', path: '/app/dashboard', icon: LayoutDashboard },
     { name: '历史记录', path: '/app/history', icon: History },
     { name: '生成日报', path: '/app/report', icon: FileText },
-    { name: '桌宠预览', path: '/app/pet', icon: Zap },
   ];
 
   const handleOpenLogin = () => {
@@ -187,6 +178,11 @@ export default function Sidebar() {
       setAuthSuccess('');
       return;
     }
+    if (authMode === 'register' && !authName.trim()) {
+      setAuthError('请输入用户名');
+      setAuthSuccess('');
+      return;
+    }
     if (!isSupabaseConfigured) {
       setAuthError('服务暂时不可用，请检查 Supabase 配置后重试');
       setAuthSuccess('');
@@ -197,17 +193,19 @@ export default function Sidebar() {
     setAuthSuccess('');
     try {
       if (authMode === 'register') {
+        const displayName = authName.trim();
         const { data, error } = await supabase.auth.signUp({
           email: authEmail.trim(),
           password: authPassword,
           options: {
             data: {
-              display_name: authName.trim() || authEmail.trim().split('@')[0]
+              display_name: displayName
             }
           }
         });
         if (error) throw error;
         if (data.user || data.session?.user) {
+          await upsertUserProfile(data.user || data.session!.user, displayName);
           await supabase.auth.signOut();
           setLoggedIn(false, null, { clearDataOnLogout: true });
           setAuthSuccess('注册成功，请直接登录');
@@ -225,6 +223,7 @@ export default function Sidebar() {
         if (error) throw error;
         resetAuthForm();
         closeLoginModal();
+        showToast('登录成功');
         return;
       }
     } catch (error) {
@@ -305,7 +304,7 @@ export default function Sidebar() {
                     {user?.avatar || 'AL'}
                   </div>
                   <div className="flex-1 text-left overflow-hidden">
-                    <p className="text-xs font-bold text-ink truncate">{user?.name || 'Alex'}</p>
+                    <p className="text-xs font-bold text-ink truncate">{user?.name || '用户'}</p>
                     <p className="text-[10px] text-muted-text font-medium truncate">个人账户</p>
                   </div>
                 </button>
@@ -329,6 +328,7 @@ export default function Sidebar() {
                               await supabase.auth.signOut();
                               setLoggedIn(false, null, { clearDataOnLogout: true });
                               setShowLogout(false);
+                              showToast('已退出登录');
                             }
                           })();
                         }}

@@ -330,7 +330,7 @@ function App() {
           ? Math.max(COLLAPSED_HEIGHT, measuredHeight || fallbackHeight)
           : layoutMode === 'idle'
             ? Math.max(56, measuredHeight || COLLAPSED_HEIGHT)
-            : COLLAPSED_HEIGHT;
+            : Math.max(56, measuredHeight || COLLAPSED_HEIGHT);
 
         const currentPosition = await currentWindow.outerPosition();
         const currentSize = await currentWindow.outerSize();

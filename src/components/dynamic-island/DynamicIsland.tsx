@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useTaskStore } from '../../stores/taskStore';
 import { useReminder } from '../../hooks/useReminder';
 import { pushTaskFromIsland } from '../../lib/islandBridge';
@@ -131,22 +130,6 @@ export function DynamicIsland({
   });
   const currentPetStatus = getPetStatus();
   const currentPetScaleMultiplier = currentPetStatus === 'working' ? 1.22 : 1;
-
-  const handleDragMouseDown = async (event: React.MouseEvent<HTMLElement>) => {
-    if (event.button !== 0) return;
-
-    const target = event.target as HTMLElement | null;
-    if (!target) return;
-    if (target.closest('button, input, textarea, select, a, [data-no-drag="true"]')) {
-      return;
-    }
-
-    try {
-      await getCurrentWindow().startDragging();
-    } catch {
-      // Ignore browser-only mode or denied environments.
-    }
-  };
 
   useEffect(() => {
     if (!recentCelebrationAt) return;
@@ -463,9 +446,7 @@ export function DynamicIsland({
         <div
           role="button"
           tabIndex={0}
-          data-tauri-drag-region
           className="group relative w-[352px] rounded-[18px] border border-white/12 bg-black/88 px-4 py-3 text-left shadow-[0_18px_60px_rgba(0,0,0,0.48)] backdrop-blur-2xl"
-          onMouseDown={handleDragMouseDown}
           onClick={() => setActiveTask(activeOrPausedTasks[0].id)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
@@ -474,6 +455,22 @@ export function DynamicIsland({
             }
           }}
         >
+          <motion.div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-[-2px] rounded-[20px] bg-[conic-gradient(from_0deg_at_50%_50%,rgba(138,255,222,0.08)_0deg,rgba(63,255,213,0.82)_70deg,rgba(199,255,245,0.36)_128deg,rgba(14,121,90,0.88)_205deg,rgba(40,255,210,0.62)_290deg,rgba(138,255,222,0.08)_360deg)] opacity-90 blur-[10px]"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 12, repeat: Infinity, ease: 'linear' }}
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 rounded-[18px] border border-emerald-300/35 shadow-[0_0_18px_rgba(63,255,213,0.28),0_0_34px_rgba(41,230,200,0.14)]"
+          />
+          <div
+            data-tauri-drag-region
+            onClick={(event) => event.stopPropagation()}
+            className="absolute left-1/2 top-2 z-20 h-1.5 w-16 -translate-x-1/2 rounded-full bg-white/12 cursor-grab active:cursor-grabbing"
+            aria-hidden="true"
+          />
           <button
             type="button"
             data-no-drag="true"
@@ -503,8 +500,6 @@ export function DynamicIsland({
       <motion.div
         role="button"
         tabIndex={0}
-        data-tauri-drag-region
-        onMouseDown={handleDragMouseDown}
         onClick={onRequestCreate}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {
@@ -516,6 +511,22 @@ export function DynamicIsland({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
       >
+        <motion.div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-[-2px] rounded-[20px] bg-[conic-gradient(from_0deg_at_50%_50%,rgba(138,255,222,0.08)_0deg,rgba(63,255,213,0.82)_70deg,rgba(199,255,245,0.36)_128deg,rgba(14,121,90,0.88)_205deg,rgba(40,255,210,0.62)_290deg,rgba(138,255,222,0.08)_360deg)] opacity-90 blur-[10px]"
+          animate={{ rotate: 360 }}
+          transition={{ duration: 12, repeat: Infinity, ease: 'linear' }}
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 rounded-[18px] border border-emerald-300/35 shadow-[0_0_18px_rgba(63,255,213,0.28),0_0_34px_rgba(41,230,200,0.14)]"
+        />
+        <div
+          data-tauri-drag-region
+          onClick={(event) => event.stopPropagation()}
+          className="absolute left-1/2 top-2 z-20 h-1.5 w-16 -translate-x-1/2 rounded-full bg-white/12 cursor-grab active:cursor-grabbing"
+          aria-hidden="true"
+        />
         <button
           type="button"
           data-no-drag="true"
