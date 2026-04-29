@@ -344,11 +344,14 @@ function App() {
         const measuredWidth = islandShellRef.current
           ? Math.ceil(islandShellRef.current.getBoundingClientRect().width)
           : 0;
+        const useCollapsedWindowSize = !composerOpen && !isIslandExpanded;
         const nextWidth = useExpandedWindow
           ? EXPANDED_WIDTH
-          : layoutMode === 'idle'
-            ? Math.max(280, measuredWidth || COLLAPSED_WIDTH)
-            : COLLAPSED_WIDTH;
+          : useCollapsedWindowSize
+            ? COLLAPSED_WIDTH
+            : layoutMode === 'idle'
+              ? Math.max(280, measuredWidth || COLLAPSED_WIDTH)
+              : COLLAPSED_WIDTH;
         const fallbackHeight =
           composerOpen && isIslandExpanded
             ? STACKED_WINDOW_HEIGHT
@@ -363,9 +366,11 @@ function App() {
           : 0;
         const nextHeight = useExpandedWindow
           ? Math.max(COLLAPSED_HEIGHT, measuredHeight || fallbackHeight)
-          : layoutMode === 'idle'
-            ? Math.max(56, measuredHeight || COLLAPSED_HEIGHT)
-            : Math.max(56, measuredHeight || COLLAPSED_HEIGHT);
+          : useCollapsedWindowSize
+            ? COLLAPSED_HEIGHT
+            : layoutMode === 'idle'
+              ? Math.max(56, measuredHeight || COLLAPSED_HEIGHT)
+              : Math.max(56, measuredHeight || COLLAPSED_HEIGHT);
 
         const currentPosition = await currentWindow.outerPosition();
         const currentSize = await currentWindow.outerSize();
@@ -437,13 +442,15 @@ function App() {
   };
 
   return (
-    <div className="bg-transparent overflow-visible pointer-events-none min-h-screen">
-      <div className="relative mx-auto flex w-full flex-col items-center pt-0 px-0">
+    <div className="bg-transparent overflow-visible pointer-events-none">
+      <div className="relative mx-auto inline-flex w-auto flex-col items-center pt-0 px-0">
         <div
           ref={islandShellRef}
           data-tauri-drag-region
           className={`pointer-events-auto inline-flex flex-col gap-2 ${
-            layoutMode === 'collapsed' ? 'items-end' : 'items-center'
+            layoutMode === 'collapsed' || (layoutMode === 'idle' && !composerOpen)
+              ? 'items-end bg-transparent'
+              : 'items-center bg-transparent'
           }`}
         >
           <DynamicIsland

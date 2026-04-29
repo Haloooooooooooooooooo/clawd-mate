@@ -82,9 +82,9 @@ export function CollapsedView({
 
       <div className="relative overflow-hidden rounded-[999px] border border-white/12 bg-[rgba(9,11,14,0.9)] px-3 py-2 shadow-[0_20px_55px_rgba(0,0,0,0.46),inset_0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-[20px]">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.08),rgba(255,255,255,0))]" />
-        <div className="pointer-events-none absolute inset-y-0 left-0 w-[45%] bg-[linear-gradient(to_right,rgba(110,231,183,0.16),rgba(110,231,183,0))]" />
+        <div className="pointer-events-none absolute inset-y-0 left-0 w-[45%] bg-[linear-gradient(to_right,rgba(255,255,255,0.06),rgba(255,255,255,0))]" />
         <div className="pointer-events-none absolute inset-[1px] rounded-[999px] border border-white/6" />
-        <div className="pointer-events-none absolute inset-x-8 bottom-0 h-10 bg-[radial-gradient(ellipse_at_bottom,rgba(110,231,183,0.1),rgba(110,231,183,0)_72%)]" />
+        <div className="pointer-events-none absolute inset-x-8 bottom-0 h-10 bg-[radial-gradient(ellipse_at_bottom,rgba(255,255,255,0.06),rgba(255,255,255,0)_72%)]" />
 
         <div className="relative flex items-center gap-2 min-h-[56px]">
           <div className="pointer-events-none absolute right-9 top-0 text-[11px] font-medium text-white/65">

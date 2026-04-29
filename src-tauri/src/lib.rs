@@ -12,7 +12,10 @@ use std::sync::{
     Arc, Mutex,
 };
 use std::thread;
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
+use tauri::{
+    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Size, WebviewUrl,
+    WebviewWindowBuilder,
+};
 use tauri::Url;
 
 fn position_main_window_at_top_center(window: &tauri::WebviewWindow) -> tauri::Result<()> {
@@ -477,7 +480,7 @@ fn load_image_model() -> String {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "gpt-image-2-2026-04-21".to_string())
+        .unwrap_or_else(|| "gpt-image-2".to_string())
 }
 
 fn find_reference_image_path() -> Option<PathBuf> {
@@ -692,6 +695,9 @@ pub fn run() {
             let bridge_state = BridgeState::default();
 
             position_main_window_at_top_center(&window)?;
+            let _ = window.set_shadow(false);
+            let _ = window.set_size(Size::Logical(LogicalSize::new(0.0, 0.0)));
+            let _ = window.set_size(Size::Logical(LogicalSize::new(352.0, 84.0)));
 
             window.show()?;
             bridge_state.island_visible.store(true, Ordering::Relaxed);

@@ -818,14 +818,19 @@ export const useStore = create<AppState>()(
         }),
 
       hydrateCloudData: async (userId, options) => {
+        const guestHistory = options?.guestHistoryToImport || [];
+
+        if (guestHistory.length > 0) {
+          // Guest to logged-in migration: persist current local history to cloud first.
+          await saveCloudSnapshot(userId, [], guestHistory, { historyOnly: true });
+        }
+
         const snapshot = await loadCloudSnapshot(userId);
-        void options;
 
         set((state) => ({
           ...state,
-          // On every fresh app run we intentionally start with an empty history view.
-          tasks: [],
-          history: [],
+          tasks: snapshot.tasks || [],
+          history: snapshot.history || [],
           activeTaskId: null,
           closedSyncIds: {},
           lastTaskSyncAtById: {},
@@ -833,8 +838,6 @@ export const useStore = create<AppState>()(
           lastFocusSyncAt: 0,
           lastBridgeSyncAt: 0
         }));
-
-        void snapshot;
       },
 
       syncCloudData: async (options) => {
@@ -857,6 +860,19 @@ export const useStore = create<AppState>()(
       storage: getGuestStorage(),
       partialize: (state) => {
         const { isLoginModalOpen, toast, ...rest } = state;
+        if (!state.isLoggedIn) {
+          return {
+            ...rest,
+            tasks: [],
+            history: [],
+            activeTaskId: null,
+            closedSyncIds: {},
+            lastTaskSyncAtById: {},
+            localStatusLockBySyncId: {},
+            lastFocusSyncAt: 0,
+            lastBridgeSyncAt: 0
+          };
+        }
         return rest;
       }
     }

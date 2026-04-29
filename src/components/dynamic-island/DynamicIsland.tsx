@@ -190,11 +190,11 @@ export function DynamicIsland({
 
   useEffect(() => {
     if (!activeTask) {
-      onLayoutModeChange?.('idle');
+      onLayoutModeChange?.(composerOpen ? 'expanded' : 'collapsed');
       return;
     }
     onLayoutModeChange?.(isExpanded ? 'expanded' : 'collapsed');
-  }, [activeTask, isExpanded, onLayoutModeChange]);
+  }, [activeTask, isExpanded, composerOpen, onLayoutModeChange]);
 
   useEffect(() => {
     if (!isExpanded || composerOpen) return;
@@ -457,7 +457,7 @@ export function DynamicIsland({
         <div
           role="button"
           tabIndex={0}
-          className="dynamic-island group relative w-[352px] overflow-hidden rounded-[999px] border border-white/12 bg-[rgba(9,11,14,0.9)] px-4 py-3 text-left shadow-[0_20px_55px_rgba(0,0,0,0.46),0_0_30px_rgba(110,231,183,0.15),inset_0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-[20px]"
+          className="dynamic-island group relative w-[352px] overflow-hidden rounded-[999px] border border-white/12 bg-[rgba(6,8,11,0.97)] px-4 py-3 text-left shadow-[inset_0_0_40px_rgba(0,0,0,0.62)]"
           onClick={() => setActiveTask(activeOrPausedTasks[0].id)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
@@ -472,11 +472,15 @@ export function DynamicIsland({
           />
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 left-0 w-[45%] bg-[linear-gradient(to_right,rgba(110,231,183,0.16),rgba(110,231,183,0))]"
+            className="pointer-events-none absolute inset-y-0 left-0 w-[45%] bg-[linear-gradient(to_right,rgba(255,255,255,0.06),rgba(255,255,255,0))]"
           />
           <div
             aria-hidden="true"
             className="pointer-events-none absolute inset-[1px] rounded-[999px] border border-white/6"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-8 bottom-0 h-10 bg-[radial-gradient(ellipse_at_bottom,rgba(255,255,255,0.06),rgba(255,255,255,0)_72%)]"
           />
           <div
             data-tauri-drag-region
@@ -511,64 +515,77 @@ export function DynamicIsland({
 
     return (
       <motion.div
-        role="button"
-        tabIndex={0}
-        onClick={onRequestCreate}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            onRequestCreate?.();
-          }
-        }}
-        className="dynamic-island group relative w-[352px] overflow-hidden rounded-[999px] border border-white/12 bg-[rgba(9,11,14,0.9)] px-4 py-3 text-left shadow-[0_20px_55px_rgba(0,0,0,0.46),0_0_30px_rgba(110,231,183,0.15),inset_0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-[20px]"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
+        key="idle-collapsed-wrapper"
+        initial={{ width: 352 }}
+        animate={{ width: 352 }}
+        exit={{ width: 352 }}
+        transition={{ duration: 0 }}
+        className="flex overflow-hidden rounded-[999px]"
       >
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.08),rgba(255,255,255,0))]"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-y-0 left-0 w-[45%] bg-[linear-gradient(to_right,rgba(110,231,183,0.16),rgba(110,231,183,0))]"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-[1px] rounded-[999px] border border-white/6"
-        />
-        <div
-          data-tauri-drag-region
-          onClick={(event) => event.stopPropagation()}
-          className="absolute left-1/2 top-2 z-20 h-1.5 w-16 -translate-x-1/2 rounded-full bg-white/12 cursor-grab active:cursor-grabbing"
-          aria-hidden="true"
-        />
-        <button
-          type="button"
-          data-no-drag="true"
-          onClick={(event) => {
-            event.stopPropagation();
-            void handleCloseIsland();
+        <motion.div
+          role="button"
+          tabIndex={0}
+          onClick={onRequestCreate}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              onRequestCreate?.();
+            }
           }}
-          className="absolute right-2 top-2 z-20 flex h-6 w-6 items-center justify-center rounded-[6px] border border-orange-300/70 bg-orange-500/85 text-sm font-bold text-white opacity-0 scale-90 transition-all hover:bg-orange-400 group-hover:opacity-100 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:scale-100"
-          aria-label="Close island"
+          className="dynamic-island group relative w-[352px] overflow-hidden rounded-[999px] border border-white/12 bg-[rgba(6,8,11,0.97)] px-4 py-3 text-left shadow-[inset_0_0_40px_rgba(0,0,0,0.62)]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
         >
-          x
-        </button>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.08),rgba(255,255,255,0))]"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 left-0 w-[45%] bg-[linear-gradient(to_right,rgba(255,255,255,0.06),rgba(255,255,255,0))]"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-[1px] rounded-[999px] border border-white/6"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-8 bottom-0 h-10 bg-[radial-gradient(ellipse_at_bottom,rgba(255,255,255,0.06),rgba(255,255,255,0)_72%)]"
+          />
+          <div
+            data-tauri-drag-region
+            onClick={(event) => event.stopPropagation()}
+            className="absolute left-1/2 top-2 z-20 h-1.5 w-16 -translate-x-1/2 rounded-full bg-white/12 cursor-grab active:cursor-grabbing"
+            aria-hidden="true"
+          />
+          <button
+            type="button"
+            data-no-drag="true"
+            onClick={(event) => {
+              event.stopPropagation();
+              void handleCloseIsland();
+            }}
+            className="absolute right-2 top-2 z-20 flex h-6 w-6 items-center justify-center rounded-[6px] border border-orange-300/70 bg-orange-500/85 text-sm font-bold text-white opacity-0 scale-90 transition-all hover:bg-orange-400 group-hover:opacity-100 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:scale-100"
+            aria-label="Close island"
+          >
+            x
+          </button>
           <div className="flex items-center gap-2.5">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center">
-            <PetSprite status={currentPetStatus} size="sm" scaleMultiplier={currentPetScaleMultiplier} />
+              <PetSprite status={currentPetStatus} size="sm" scaleMultiplier={currentPetScaleMultiplier} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="mb-0.5 text-sm font-semibold text-white">点击添加任务开始学习</div>
+              <div className="text-xs text-white/50">Desktop island is waiting</div>
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="mb-0.5 text-sm font-semibold text-white">点击添加任务开始学习</div>
-            <div className="text-xs text-white/50">Desktop island is waiting</div>
-          </div>
-        </div>
+        </motion.div>
       </motion.div>
     );
   }
 
   return (
-    <div ref={islandRootRef}>
+    <div ref={islandRootRef} className="bg-transparent">
       <AnimatePresence mode="wait">
         {isExpanded ? (
           <motion.div
@@ -611,7 +628,7 @@ export function DynamicIsland({
             animate={{ width: 352 }}
             exit={{ width: 352 }}
             transition={{ duration: 0 }}
-            className="flex"
+            className="flex overflow-hidden rounded-[999px]"
           >
             <CollapsedView
               key="collapsed"

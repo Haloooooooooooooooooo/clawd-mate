@@ -258,7 +258,7 @@ export default function DailyReportView() {
       const debugLogs = (error as GenerateDebugError).debugLogs ?? startDebug;
       localStorage.setItem(getDebugStorageKey(selectedDate), debugLogs.join('\n'));
       setGenerateDebug(debugLogs);
-      setGenerateError(normalizeGenerateError(error));
+      setGenerateError('图片生成失败，稍后再试');
     } finally {
       isGeneratingRef.current = false;
       setIsGenerating(false);
@@ -377,6 +377,17 @@ export default function DailyReportView() {
                         alt={`Daily report for ${selectedDate}`}
                         className="w-full h-full object-contain"
                       />
+                    ) : isGenerating ? (
+                      <div className="w-full h-full flex items-center justify-center px-8 md:px-12">
+                        <div className="daily-report-loader" aria-live="polite" aria-label="正在生成日报">
+                          <span className="daily-report-loader__circle" />
+                          <span className="daily-report-loader__circle" />
+                          <span className="daily-report-loader__circle" />
+                          <span className="daily-report-loader__shadow" />
+                          <span className="daily-report-loader__shadow" />
+                          <span className="daily-report-loader__shadow" />
+                        </div>
+                      </div>
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center gap-6 px-8 md:px-12 text-center">
                         <div className="w-20 h-20 rounded-[20px] border border-border-main bg-white flex items-center justify-center shadow-sm">
@@ -388,11 +399,6 @@ export default function DailyReportView() {
                             点击下方按钮后，会把当天记录整理成生图提示词并请求生成。生成成功后，图片会自动显示在这里。
                           </p>
                           {generateError && <p className="text-sm text-red-500 max-w-md">{generateError}</p>}
-                          {generateDebug.length > 0 && (
-                            <pre className="mt-3 max-w-md rounded-xl bg-stone-100/80 px-3 py-2 text-left text-[11px] leading-5 text-stone-500 whitespace-pre-wrap break-all">
-                              {generateDebug.join('\n')}
-                            </pre>
-                          )}
                         </div>
                         <button
                           type="button"
