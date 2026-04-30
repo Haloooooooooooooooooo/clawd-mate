@@ -438,7 +438,7 @@ export default function Sidebar() {
                   }}
                   className="px-4 py-2 rounded-lg bg-primary text-sm font-semibold text-white hover:opacity-90"
                 >
-                  下载桌面版
+                  下载灵动岛
                 </button>
               </div>
             </motion.div>

@@ -79,7 +79,7 @@ const LandingPage: React.FC = () => {
                 onClick={openDesktopDownload}
                 className="button-3d !bg-white !text-ink !shadow-[6px_6px_0_#E6BE9E] hover:!bg-[#fffaf4]"
               >
-                下载桌面版
+                下载灵动岛
               </button>
             </div>
           </div>
