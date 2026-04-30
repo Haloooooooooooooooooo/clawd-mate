@@ -6,18 +6,17 @@ const LandingPage: React.FC = () => {
 
   return (
     <div className="h-screen w-full bg-bg-primary text-text-dark flex flex-col relative overflow-hidden font-body">
-      {/* 1. Navbar - 品牌放大 */}
       <nav className="w-full h-[88px] flex items-center justify-between px-16 z-50 shrink-0">
-        <div className="flex items-center gap-20"> {/* 增加 Logo 与菜单之间的间距，但整体向左移 */}
+        <div className="flex items-center gap-20">
           <div className="flex items-center">
             <img src="/clawd.png" alt="Clawd" className="w-14 h-14 pixel-icon" style={{ imageRendering: 'pixelated' }} />
             <img src="/clawdmate.png" alt="ClawdMate" className="h-28 pixel-icon -ml-4 translate-y-2" style={{ imageRendering: 'pixelated' }} />
           </div>
-          
+
           <div className="hidden md:flex items-center gap-10 text-lg">
             <div className="relative group cursor-pointer font-bold">
               <span className="text-primary">首页</span>
-              <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-[3px] bg-primary/60 rounded-full"></div>
+              <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-[3px] bg-primary/60 rounded-full" />
             </div>
             <a href="#" className="text-text-dark font-medium hover:text-primary transition-colors">功能</a>
             <a href="#" className="text-text-dark font-medium hover:text-primary transition-colors">关于我们</a>
@@ -38,19 +37,15 @@ const LandingPage: React.FC = () => {
         </div>
       </nav>
 
-      {/* Hero Section - 调整布局位置 */}
       <main className="flex-1 w-full flex flex-col md:flex-row items-center px-16 relative">
-        
-        {/* 2 & 3. Hero 左侧文案与标题调整 */}
         <div className="w-full md:w-[680px] z-10 flex flex-col items-start mt-[-160px]">
-          {/* 主标题放大并对齐 */}
-          <img 
-            src="/clawdmate.png" 
-            alt="ClawdMate" 
-            className="w-[640px] h-auto mb-0 pixel-icon -ml-12" 
-            style={{ imageRendering: 'pixelated' }} 
+          <img
+            src="/clawdmate.png"
+            alt="ClawdMate"
+            className="w-[640px] h-auto mb-0 pixel-icon -ml-12"
+            style={{ imageRendering: 'pixelated' }}
           />
-          
+
           <div style={{ transform: 'translateY(-180px)' }}>
             <h2 className="text-[38px] font-bold mb-5 leading-tight ml-10 mt-0">
               现在就<span className="text-primary">开始</span>做你想做的事情吧！
@@ -65,44 +60,40 @@ const LandingPage: React.FC = () => {
               onClick={() => navigate('/app/dashboard')}
               className="button-3d ml-10"
             >
-              开始专注 <span className="inline-block transition-transform group-hover:translate-x-1">→</span>
+              开始专注<span className="inline-block transition-transform group-hover:translate-x-1">→</span>
             </button>
           </div>
         </div>
 
-        {/* 3. Hero 右侧视频区域 - 强制 absolute 定位与边缘渐隐 */}
-        <div className="absolute top-[-40px] right-0 w-[64vw] h-[85vh] min-h-[750px] overflow-hidden z-0">
+        <div className="absolute top-[-60px] right-0 w-[74vw] h-[90vh] min-h-[780px] overflow-hidden z-0">
           <video
             autoPlay
             loop
             muted
             playsInline
             className="w-full h-full object-cover object-top"
+            style={{
+              WebkitMaskImage:
+                'linear-gradient(to right, transparent 0%, rgba(0,0,0,0.15) 8%, rgba(0,0,0,0.45) 13%, black 18%)',
+              maskImage:
+                'linear-gradient(to right, transparent 0%, rgba(0,0,0,0.15) 8%, rgba(0,0,0,0.45) 13%, black 18%)'
+            }}
           >
             <source src="/hero-video.mp4" type="video/mp4" />
           </video>
-          
-          {/* 顶部渐隐 - 重新使用色彩渐隐融入背景 */}
-          <div 
-            className="absolute inset-x-0 top-0 h-[40px] z-10"
+
+          <div
+            className="absolute inset-x-0 top-0 h-[40px] z-20"
             style={{ background: 'linear-gradient(to bottom, #FFF4E8 0%, rgba(255,244,232,0) 100%)' }}
           />
-          {/* 左侧渐隐 - 范围进一步缩小到 8% */}
-          <div 
-            className="absolute inset-y-0 left-0 w-[8%] z-10"
-            style={{ background: 'linear-gradient(to right, #FFF4E8 0%, rgba(255,244,232,0) 100%)' }}
-          />
-          {/* 底部渐隐 - 范围缩小到 12% */}
-          <div 
-            className="absolute inset-x-0 bottom-0 h-[12%] z-10"
+          <div
+            className="absolute inset-x-0 bottom-0 h-[12%] z-20"
             style={{ background: 'linear-gradient(to bottom, rgba(255,244,232,0) 0%, #FFF4E8 100%)' }}
           />
         </div>
       </main>
 
-      {/* 4. 底部四张卡片 - 重新固定位置以保证首屏展示 */}
-      <div className="absolute bottom-[40px] left-1/2 -translate-x-1/2 w-full max-w-[1300px] grid grid-cols-1 md:grid-cols-4 gap-6 px-16 z-20">
-        {/* Card 1 */}
+      <div className="absolute bottom-[60px] left-1/2 -translate-x-[55%] w-full max-w-[1300px] grid grid-cols-1 md:grid-cols-4 gap-6 px-16 z-20">
         <div className="bg-card-bg backdrop-blur-md rounded-[28px] border border-border-light p-6 flex items-center gap-5 hover:bg-white/90 transition-all cursor-default shadow-sm">
           <img src="/clock.png" alt="Tasks" className="w-16 h-16 pixel-icon" style={{ imageRendering: 'pixelated' }} />
           <div>
@@ -111,7 +102,6 @@ const LandingPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 2 */}
         <div className="bg-card-bg backdrop-blur-md rounded-[28px] border border-border-light p-6 flex items-center gap-5 hover:bg-white/90 transition-all cursor-default shadow-sm">
           <img src="/island.png" alt="Island" className="w-16 h-16 pixel-icon" style={{ imageRendering: 'pixelated' }} />
           <div>
@@ -120,7 +110,6 @@ const LandingPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 3 */}
         <div className="bg-card-bg backdrop-blur-md rounded-[28px] border border-border-light p-6 flex items-center gap-5 hover:bg-white/90 transition-all cursor-default shadow-sm">
           <img src="/clawd.png" alt="Clawd" className="w-16 h-16 pixel-icon" style={{ imageRendering: 'pixelated' }} />
           <div>
@@ -129,7 +118,6 @@ const LandingPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 4 */}
         <div className="bg-card-bg backdrop-blur-md rounded-[28px] border border-border-light p-6 flex items-center gap-5 hover:bg-white/90 transition-all cursor-default shadow-sm">
           <img src="/heart.png" alt="Relax" className="w-16 h-16 pixel-icon" style={{ imageRendering: 'pixelated' }} />
           <div>

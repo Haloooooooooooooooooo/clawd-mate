@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -154,7 +154,7 @@ export default function Sidebar() {
   const resolveLoginErrorMessage = async (rawMessage: string, email: string) => {
     const message = rawMessage.toLowerCase();
     if (message.includes('email not confirmed')) {
-      return '该邮箱尚未完成验证，请先在 Supabase 开启“关闭邮箱验证”或完成验证';
+      return '该邮箱尚未完成验证，请先完成邮箱验证后再登录';
     }
     if (message.includes('user not found') || message.includes('no user found')) {
       return '该账号尚未注册';
@@ -342,15 +342,18 @@ export default function Sidebar() {
                       <button
                         onClick={() => {
                           void (async () => {
+                            setShowLogout(false);
+                            setLoggedIn(false, null, { clearDataOnLogout: true });
+                            showToast('已退出登录');
                             try {
                               await syncCloudData();
                             } catch (error) {
                               console.warn('[logout] failed to sync before sign out', error);
-                            } finally {
+                            }
+                            try {
                               await supabase.auth.signOut();
-                              setLoggedIn(false, null, { clearDataOnLogout: true });
-                              setShowLogout(false);
-                              showToast('已退出登录');
+                            } catch (error) {
+                              console.warn('[logout] sign out request failed', error);
                             }
                           })();
                         }}
@@ -468,7 +471,7 @@ export default function Sidebar() {
                   {authMode === 'login' ? (
                     <>还没有账号？ <button onClick={() => { resetAuthForm(); setAuthMode('register'); }} className="border-0 bg-transparent p-0 text-primary-accent font-bold shadow-none hover:underline">立即注册</button></>
                   ) : (
-                    <>已有账号？ <button onClick={() => { resetAuthForm(); setAuthMode('login'); }} className="border-0 bg-transparent p-0 text-primary-accent font-bold shadow-none hover:underline">返回登录</button></>
+                    <>已有账号？<button onClick={() => { resetAuthForm(); setAuthMode('login'); }} className="border-0 bg-transparent p-0 text-primary-accent font-bold shadow-none hover:underline">返回登录</button></>
                   )}
                 </p>
               </div>

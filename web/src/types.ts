@@ -18,6 +18,8 @@ export interface Task {
   title: string;
   totalDuration: number; // in seconds
   remainingTime: number; // in seconds
+  actualDurationSeconds?: number; // finalized actual time (can exceed totalDuration when overtime)
+  overtimeStartedAt?: number; // timestamp when task first entered overtime
   startTime: number; // timestamp
   endTime?: number; // timestamp when done/cancelled
   status: TaskStatus;
@@ -28,6 +30,15 @@ export interface Task {
 export interface DailyRecord {
   date: string; // YYYY-MM-DD
   tasks: Task[];
+}
+
+export interface DailyReportImage {
+  id: string;
+  date: string; // YYYY-MM-DD
+  imageDataUrl: string;
+  promptPayload?: string;
+  debugLogs?: string[];
+  createdAt: number; // timestamp
 }
 
 export interface DailySummaryTimelineItem {

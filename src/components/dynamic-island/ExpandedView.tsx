@@ -238,7 +238,7 @@ export function ExpandedView({
               type="button"
               data-no-drag="true"
               onClick={onAddTask}
-              className="rounded-[12px] border border-white/10 bg-white/8 px-3 py-2 text-[12px] text-white/80 transition-colors hover:bg-white/14"
+              className="island-action-btn"
             >
               添加任务
             </button>
@@ -246,10 +246,36 @@ export function ExpandedView({
               type="button"
               data-no-drag="true"
               onClick={onGoHome}
-              className="rounded-[12px] border border-white/10 bg-white/8 px-3 py-2 text-[12px] text-white/80 transition-colors hover:bg-white/14"
+              className="island-action-btn"
             >
               回到主页
             </button>
+            <style>{`
+              .island-action-btn {
+                padding: 0.6em 1em;
+                font-size: 12px;
+                letter-spacing: 1.5px;
+                font-weight: 500;
+                color: #3fffd5;
+                background: rgba(63, 255, 213, 0.08);
+                border: 1px solid rgba(63, 255, 213, 0.3);
+                border-radius: 12px;
+                box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.15);
+                transition: all 0.3s ease;
+                cursor: pointer;
+                outline: none;
+              }
+              .island-action-btn:hover {
+                background-color: #3fffd5;
+                box-shadow: 0px 12px 20px rgba(63, 255, 213, 0.4);
+                color: #212121;
+                font-weight: 600;
+                transform: translateY(-3px);
+              }
+              .island-action-btn:active {
+                transform: translateY(-1px);
+              }
+            `}</style>
           </section>
         </div>
       </div>

@@ -472,26 +472,26 @@ function App() {
                 transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
                 className="w-[460px] overflow-visible"
               >
-                <div className="flex h-[430px] flex-col rounded-[24px] border border-white/10 bg-black/80 p-4 shadow-[0_24px_60px_rgba(0,0,0,0.5)] backdrop-blur-3xl">
-                  <div className="mb-4 flex items-center justify-between px-2">
-                    <div>
-                      <div className="text-[10px] uppercase tracking-[0.4em] text-white/30 font-bold">ClawdMate</div>
-                      <div className="text-base font-semibold text-white/80">New Focus Session</div>
-                    </div>
-                    <button
-                      onClick={() => setShowInput(false)}
-                      className="group flex h-8 w-8 items-center justify-center rounded-full bg-white/5 transition-all hover:bg-white/10"
-                    >
-                      <span className="text-white/40 group-hover:text-white/80">×</span>
-                    </button>
+              <div className="flex h-[430px] flex-col rounded-[24px] border border-white/10 bg-black/80 p-4 shadow-[0_24px_60px_rgba(0,0,0,0.5)] backdrop-blur-3xl">
+                <div className="mb-4 flex items-center justify-between px-2">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.4em] text-[#3fffd5] font-bold">ClawdMate</div>
+                    <div className="text-base font-semibold text-white/95">New Focus Session</div>
                   </div>
-
-                  <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
-                    <TaskInput onTaskStart={handleTaskStart} keepCurrentActiveTask={hasActiveTask} />
-                  </div>
+                  <button
+                    onClick={() => setShowInput(false)}
+                    className="group flex h-8 w-8 items-center justify-center rounded-full bg-white/5 transition-all hover:bg-[#3fffd5]"
+                  >
+                    <span className="text-white/40 group-hover:text-black font-bold">×</span>
+                  </button>
                 </div>
-              </motion.div>
-            )}
+
+                <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+                  <TaskInput onTaskStart={handleTaskStart} keepCurrentActiveTask={hasActiveTask} />
+                </div>
+              </div>
+            </motion.div>
+          )}
           </AnimatePresence>
         </div>
       </div>

@@ -495,10 +495,10 @@ export function DynamicIsland({
               event.stopPropagation();
               void handleCloseIsland();
             }}
-            className="absolute right-2 top-2 z-20 flex h-6 w-6 items-center justify-center rounded-[6px] border border-orange-300/70 bg-orange-500/85 text-sm font-bold text-white opacity-0 scale-90 transition-all hover:bg-orange-400 group-hover:opacity-100 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:scale-100"
+            className="absolute right-2 top-2 z-20 flex h-6 w-6 items-center justify-center rounded-[6px] bg-[#3fffd5] text-sm font-light text-black opacity-0 scale-90 transition-all hover:bg-[#2fd3aa] group-hover:opacity-100 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:scale-100"
             aria-label="Close island"
           >
-            x
+            ✕
           </button>
           <div className="flex items-center gap-2.5">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center">
@@ -565,10 +565,10 @@ export function DynamicIsland({
               event.stopPropagation();
               void handleCloseIsland();
             }}
-            className="absolute right-2 top-2 z-20 flex h-6 w-6 items-center justify-center rounded-[6px] border border-orange-300/70 bg-orange-500/85 text-sm font-bold text-white opacity-0 scale-90 transition-all hover:bg-orange-400 group-hover:opacity-100 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:scale-100"
+            className="absolute right-2 top-2 z-20 flex h-6 w-6 items-center justify-center rounded-[6px] bg-[#3fffd5] text-sm font-light text-black opacity-0 scale-90 transition-all hover:bg-[#2fd3aa] group-hover:opacity-100 group-hover:scale-100 group-focus-within:opacity-100 group-focus-within:scale-100"
             aria-label="Close island"
           >
-            x
+            ✕
           </button>
           <div className="flex items-center gap-2.5">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center">

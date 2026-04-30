@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   DailyImagePromptData,
   DailyImageTaskInput,
   DailyRecord,
@@ -153,10 +153,7 @@ export function buildDailyTaskBlock(data: DailyImagePromptData | null): string {
   return data.tasks
     .map((task) => {
       const statusLabel = task.status === 'completed' ? '已完成' : '已取消';
-      return `${task.time}，${statusLabel}，${task.title}，${task.duration}分钟：${inferTaskScene(
-        task.title,
-        task.status
-      )}`;
+      return `${task.time}，${statusLabel}，${task.title}，${task.duration}分钟，${inferTaskScene(task.title, task.status)}`;
     })
     .join('\n');
 }
@@ -169,17 +166,14 @@ export function buildDailyImagePrompt(data: DailyImagePromptData | null): string
   const taskBlock = buildDailyTaskBlock(data);
 
   return `生成一张治愈系像素插画，用于小红书竖版分享。
-
 主角必须严格参考我提供的图片 png/clawd.png：
 - 所有角色都必须是同一个 Clawd
 - 不允许改成其他动物或重新设计角色
 - 角色造型（轮廓、比例、颜色、眼睛）必须完全一致，不允许风格化或细节变化
-
 整体风格：
 - 像素角色 + 柔和手绘场景
 - 低饱和奶油色、浅绿色、暖橙色
 - 温柔治愈，轻微纸张质感
-
 画面构图：
 - 竖版生活地图
 - 多个任务场景分布在同一张地图中
@@ -193,11 +187,10 @@ ${taskBlock}
 
 标题：
 今天也有在认真生活
-
 副标题：
 不完美的一天，也很可爱呀
 
-底部左侧为“今日小结”卡片，内容：
+底部左侧“今日小结”卡片，内容：
 今日小结
 完成 ${data.completed_count} 项
 取消 ${data.cancelled_count} 项
@@ -206,7 +199,6 @@ ${taskBlock}
 底部右侧为小尺寸便利贴标语：
 ${data.summary_text}
 
-要求：
-不要 UI 界面、不要图表、不要科技感、不要高饱和。
+要求：不要 UI 界面、不要图表、不要科技感、不要高饱和。
 重点是统一角色、场景叙事感、温柔生活氛围。`;
 }

@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useTaskStore } from '../../stores/taskStore';
 import type { Task } from '../../types/task';
 import { pushTaskFromIsland } from '../../lib/islandBridge';
+import { StartButton } from './StartButton';
 
 interface SimpleModeProps {
   onStart: (task: Task) => void;
@@ -83,7 +84,7 @@ export function SimpleMode({
         onChange={(event) => setTitle(event.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="任务名称..."
-        className="mb-3 w-full rounded-lg bg-white/10 px-3 py-2 text-white placeholder-white/40 transition-all focus:outline-none focus:ring-2 focus:ring-white/30"
+        className="island-input mb-3"
       />
 
       <div className="mb-4">
@@ -97,11 +98,7 @@ export function SimpleMode({
                 setDuration(preset);
                 setUseCustom(false);
               }}
-              className={`rounded-lg px-3 py-1.5 text-sm transition-all ${
-                !useCustom && duration === preset
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-white/10 text-white/70 hover:bg-white/20'
-              }`}
+              className={`preset-btn ${!useCustom && duration === preset ? 'preset-btn-active' : ''}`}
             >
               {preset}分钟
             </button>
@@ -114,13 +111,13 @@ export function SimpleMode({
               onChange={(event) => setDuration(Math.max(1, Math.min(180, Number(event.target.value))))}
               min={1}
               max={180}
-              className="w-20 rounded-lg bg-blue-500 px-2 py-1.5 text-center text-sm text-white focus:outline-none focus:ring-2 focus:ring-white/30"
+              className="preset-input"
             />
           ) : (
             <button
               type="button"
               onClick={() => setUseCustom(true)}
-              className="rounded-lg bg-white/10 px-3 py-1.5 text-sm text-white/70 transition-all hover:bg-white/20"
+              className="preset-btn"
             >
               自定义
             </button>
@@ -128,14 +125,8 @@ export function SimpleMode({
         </div>
       </div>
 
-      <div className="mt-auto">
-        <button
-          onClick={handleStart}
-          disabled={!title.trim()}
-          className="w-full rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 py-2.5 font-medium text-white shadow-lg transition-all disabled:cursor-not-allowed disabled:opacity-50 hover:from-blue-600 hover:to-purple-600"
-        >
-          开始学习 🦀
-        </button>
+      <div className="mt-auto flex justify-center">
+        <StartButton onClick={handleStart} disabled={!title.trim()}>开始学习</StartButton>
       </div>
     </motion.div>
   );

@@ -10,7 +10,7 @@ import { getLocalDateKey } from '../lib/date';
 import { getDailyReportEligibility } from '../lib/dailyReportGeneration';
 import { normalizeHistorySubtasks } from '../lib/history';
 import { getTaskActualDurationSeconds } from '../lib/taskTime';
-import { Plus, Play, Pause, CheckCircle2, X, ChevronRight, SkipForward, Menu } from 'lucide-react';
+import { Plus, Play, Pause, CheckCircle2, X, ChevronRight, SkipForward } from 'lucide-react';
 import { cn, formatTime } from '../lib/utils';
 import { motion } from 'motion/react';
 import { PetSprite, type PetStatus } from '@pet';
@@ -183,7 +183,9 @@ export default function Dashboard() {
 
     const newSubtasks = [...subtasks];
     const item = newSubtasks.splice(draggedIndex, 1)[0];
-    newSubtasks.splice(index, 0, item);
+    // 如果拖动的项在目标之上被移除，目标索引需要减1
+    const insertIndex = draggedIndex < index ? index - 1 : index;
+    newSubtasks.splice(insertIndex, 0, item);
 
     setSubtasks(newSubtasks);
     setDraggedIndex(null);
@@ -349,8 +351,9 @@ export default function Dashboard() {
                             dragOverIndex === i && "border-t-[3px] border-t-[#526D4E] rounded-t-none"
                           )}
                         >
-                          <Menu size={16} className="text-stone-300 cursor-grab active:cursor-grabbing shrink-0" />
-                          <span className="font-mono text-xs font-bold text-stone-300 shrink-0 bg-stone-50 w-6 h-6 flex items-center justify-center rounded-lg">{i + 1}</span>
+                          <span className="font-mono text-sm font-black text-[#2f4636] shrink-0 bg-[#f6efe7] border border-[#cdb9a5] w-8 h-8 flex items-center justify-center rounded-md shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+                            {i + 1}
+                          </span>
                           <span className="flex-1 font-medium text-stone-600 truncate">{st}</span>
 
                           <div className="flex items-center gap-1 opacity-0 group-hover/item:opacity-100 transition-opacity">

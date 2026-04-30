@@ -1,5 +1,6 @@
-import { DailyRecord, Subtask, Task } from '../types';
+import { DailyRecord, DailyReportImage, Subtask, Task } from '../types';
 import { getTaskHistoryDateKey, getTaskTerminalTimestamp } from './date';
+import { getTaskActualDurationSeconds } from './taskTime';
 import { supabase } from './supabase';
 
 type DbHistoryRow = {
@@ -9,6 +10,15 @@ type DbHistoryRow = {
   total_duration_seconds: number;
   actual_duration_seconds: number;
   payload: { subtasks?: Subtask[] } | null;
+  created_at: string;
+};
+
+type DbDailyReportImageRow = {
+  id: string;
+  report_date: string;
+  image_data_url: string;
+  prompt_payload: string | null;
+  debug_logs: string[] | null;
   created_at: string;
 };
 
@@ -28,7 +38,9 @@ function groupHistoryByDate(tasks: Task[]): DailyRecord[] {
     }));
 }
 
-export async function loadCloudSnapshot(userId: string): Promise<{ tasks: Task[]; history: DailyRecord[] }> {
+export async function loadCloudSnapshot(
+  userId: string
+): Promise<{ tasks: Task[]; history: DailyRecord[]; dailyReportImages: Record<string, DailyReportImage[]> }> {
   const { data: historyRows, error: historyError } = await supabase
     .from('task_history')
     .select('id,title,status,total_duration_seconds,actual_duration_seconds,payload,created_at')
@@ -36,6 +48,15 @@ export async function loadCloudSnapshot(userId: string): Promise<{ tasks: Task[]
     .order('created_at', { ascending: true });
 
   if (historyError) throw historyError;
+
+  const { data: dailyReportRows, error: dailyReportError } = await supabase
+    .from('daily_report_images')
+    .select('id,report_date,image_data_url,prompt_payload,debug_logs,created_at')
+    .eq('user_id', userId)
+    .order('report_date', { ascending: false })
+    .order('created_at', { ascending: true });
+
+  if (dailyReportError) throw dailyReportError;
 
   const historyTasks: Task[] = ((historyRows as DbHistoryRow[] | null) || []).map((row) => {
     const createdAt = new Date(row.created_at).getTime();
@@ -46,6 +67,7 @@ export async function loadCloudSnapshot(userId: string): Promise<{ tasks: Task[]
       title: row.title,
       totalDuration: total,
       remainingTime: Math.max(0, total - actual),
+      actualDurationSeconds: actual,
       startTime: createdAt,
       endTime: createdAt,
       status: row.status,
@@ -54,9 +76,27 @@ export async function loadCloudSnapshot(userId: string): Promise<{ tasks: Task[]
     };
   });
 
+  const dailyReportImages = ((dailyReportRows as DbDailyReportImageRow[] | null) || []).reduce(
+    (acc, row) => {
+      const list = acc[row.report_date] || [];
+      list.push({
+        id: row.id,
+        date: row.report_date,
+        imageDataUrl: row.image_data_url,
+        promptPayload: row.prompt_payload ?? undefined,
+        debugLogs: Array.isArray(row.debug_logs) ? row.debug_logs : undefined,
+        createdAt: new Date(row.created_at).getTime()
+      });
+      acc[row.report_date] = list.slice(-2);
+      return acc;
+    },
+    {} as Record<string, DailyReportImage[]>
+  );
+
   return {
     tasks: [],
-    history: groupHistoryByDate(historyTasks)
+    history: groupHistoryByDate(historyTasks),
+    dailyReportImages
   };
 }
 
@@ -68,6 +108,7 @@ export async function saveCloudSnapshot(
   userId: string,
   tasks: Task[],
   history: DailyRecord[],
+  dailyReportImagesByDate: Record<string, DailyReportImage[]>,
   options?: SaveCloudOptions
 ): Promise<void> {
   void tasks;
@@ -97,7 +138,7 @@ export async function saveCloudSnapshot(
         mode: task.subtasks.length > 0 ? 'structured' : 'simple',
         status: task.status,
         total_duration_seconds: Math.max(0, task.totalDuration),
-        actual_duration_seconds: Math.max(0, task.totalDuration - task.remainingTime),
+        actual_duration_seconds: getTaskActualDurationSeconds(task),
         payload: {
           subtasks: task.subtasks
         },
@@ -116,5 +157,29 @@ export async function saveCloudSnapshot(
       .from('task_history')
       .insert(historyItems);
     if (insertHistoryError) throw insertHistoryError;
+  }
+
+  const { error: clearDailyReportImagesError } = await supabase
+    .from('daily_report_images')
+    .delete()
+    .eq('user_id', userId);
+  if (clearDailyReportImagesError) throw clearDailyReportImagesError;
+
+  const dailyReportItems = Object.entries(dailyReportImagesByDate).flatMap(([date, list]) =>
+    list.slice(-2).map((item) => ({
+      user_id: userId,
+      report_date: date,
+      image_data_url: item.imageDataUrl,
+      prompt_payload: item.promptPayload ?? null,
+      debug_logs: item.debugLogs ?? null,
+      created_at: new Date(item.createdAt).toISOString()
+    }))
+  );
+
+  if (dailyReportItems.length > 0) {
+    const { error: insertDailyReportImagesError } = await supabase
+      .from('daily_report_images')
+      .insert(dailyReportItems);
+    if (insertDailyReportImagesError) throw insertDailyReportImagesError;
   }
 }

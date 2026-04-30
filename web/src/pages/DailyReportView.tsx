@@ -1,9 +1,9 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Download, RefreshCw, Share2, Calendar, FileImage } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -19,6 +19,7 @@ import {
 } from '../lib/dailyImageSummary';
 
 const REPORT_IMAGE_STORAGE_PREFIX = 'clawdmate-daily-report-image:';
+const REPORT_IMAGE_LIST_STORAGE_PREFIX = 'clawdmate-daily-report-images:';
 const REPORT_PROMPT_STORAGE_PREFIX = 'clawdmate-daily-report-prompt:';
 const REPORT_DEBUG_STORAGE_PREFIX = 'clawdmate-daily-report-debug:';
 
@@ -34,6 +35,10 @@ type GenerateDailyReportResult = {
 
 function getImageStorageKey(date: string) {
   return `${REPORT_IMAGE_STORAGE_PREFIX}${date}`;
+}
+
+function getImageListStorageKey(date: string) {
+  return `${REPORT_IMAGE_LIST_STORAGE_PREFIX}${date}`;
 }
 
 function getPromptStorageKey(date: string) {
@@ -73,31 +78,31 @@ function normalizeGenerateError(error: unknown) {
   }
 
   if (rawMessage.includes('没有读取到图片 API Key')) {
-    return '还没有读取到生图密钥。请检查 `.env.local` 里的 `VORTEXAI_API_KEY` 是否已配置，然后重启应用。';
+    return '还没有读取到生图密钥。请检查 `.env.local` 里的 `VORTEXAI_API_KEY`，然后重启应用。';
   }
 
   if (rawMessage.includes('API Key 无效') || rawMessage.includes('已过期')) {
     return '生图密钥不可用。请更换新的 `VORTEXAI_API_KEY` 后再试。';
   }
 
-  if (rawMessage.includes('太频繁') || rawMessage.includes('额度不足')) {
-    return '图片服务当前请求过多，或者账户额度不足。可以稍后再试。';
+  if (rawMessage.includes('太频繁') || rawMessage.includes('额度不足') || rawMessage.toLowerCase().includes('rate limit')) {
+    return '图片服务当前请求过多，或账户额度不足。可以稍后再试。';
   }
 
   if (rawMessage.includes('524') || rawMessage.includes('bad_response_status_code')) {
-    return '图片服务处理超时了。这次请求已经发到服务端，但服务端没有及时返回，请稍后重试。';
+    return '图片服务处理超时。这次请求已发到服务端，但没有及时返回，请稍后重试。';
   }
 
   if (rawMessage.includes('超时')) {
-    return '这次生成超时了。这个图像服务返回比较慢，可以稍后再试。';
+    return '这次生成超时了。图片服务返回较慢，可以稍后再试。';
   }
 
   if (rawMessage.includes('连接图片服务失败')) {
-    return '暂时连不上图片服务。请检查网络，或者确认 `VORTEXAI_API_HOST` 是否正确。';
+    return '暂时连不上图片服务。请检查网络，或确认 `VORTEXAI_API_HOST` 是否正确。';
   }
 
   if (rawMessage.includes('图片服务暂时不可用')) {
-    return '图片服务暂时不稳定，等一会儿再试会更稳。';
+    return '图片服务暂时不稳定，等一会再试会更稳。';
   }
 
   if (rawMessage.includes('当前环境还没有连上桌面端生图能力')) {
@@ -134,10 +139,7 @@ async function invokeGenerateDailyReportImage(prompt: string): Promise<GenerateD
         debugLogs,
         `fail source=tauri-global message=${error instanceof Error ? error.message : String(error)}`
       );
-      throw createGenerateError(
-        error instanceof Error ? error.message : String(error),
-        debugLogs
-      );
+      throw createGenerateError(error instanceof Error ? error.message : String(error), debugLogs);
     }
   }
 
@@ -159,10 +161,7 @@ async function invokeGenerateDailyReportImage(prompt: string): Promise<GenerateD
       debugLogs,
       `fail source=tauri-module message=${error instanceof Error ? error.message : String(error)}`
     );
-    throw createGenerateError(
-      error instanceof Error ? error.message : String(error),
-      debugLogs
-    );
+    throw createGenerateError(error instanceof Error ? error.message : String(error), debugLogs);
   }
 }
 
@@ -175,12 +174,16 @@ export default function DailyReportView() {
     openLoginModal,
     showToast,
     getDailyReportGenerationCount,
-    incrementDailyReportGenerationCount
+    incrementDailyReportGenerationCount,
+    getDailyReportImages,
+    addDailyReportImage,
+    dailyReportImagesByDate
   } = useStore();
 
   const generationDateKey = getLocalDateKey(new Date());
   const [selectedDate, setSelectedDate] = useState(searchParams.get('date') || getLocalDateKey(new Date()));
-  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [generatedImageUrls, setGeneratedImageUrls] = useState<string[]>([]);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [generateDebug, setGenerateDebug] = useState<string[]>([]);
@@ -193,14 +196,39 @@ export default function DailyReportView() {
   const dailyImagePromptData = buildDailyImagePromptData(dailyImageSummary);
   const dailyImagePromptPayload = buildDailyImagePromptPayload(dailyImageSummary);
   const dailyImagePrompt = buildDailyImagePrompt(dailyImagePromptData);
+  const generatedImageUrl = generatedImageUrls[selectedImageIndex] || null;
 
   useEffect(() => {
-    const storedImage = localStorage.getItem(getImageStorageKey(selectedDate));
+    const cloudImages = getDailyReportImages(selectedDate);
+    if (cloudImages.length > 0) {
+      const urls = cloudImages.map((item) => item.imageDataUrl);
+      setGeneratedImageUrls(urls);
+      setSelectedImageIndex(Math.max(0, urls.length - 1));
+      return;
+    }
+
+    const storedListRaw = localStorage.getItem(getImageListStorageKey(selectedDate));
+    let storedList: string[] = [];
+    if (storedListRaw) {
+      try {
+        const parsed = JSON.parse(storedListRaw);
+        if (Array.isArray(parsed)) {
+          storedList = parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+        }
+      } catch {
+        storedList = [];
+      }
+    }
+    const legacyImage = localStorage.getItem(getImageStorageKey(selectedDate));
+    if (storedList.length === 0 && legacyImage && legacyImage.trim().length > 0) {
+      storedList = [legacyImage];
+    }
     const storedDebug = localStorage.getItem(getDebugStorageKey(selectedDate));
-    setGeneratedImageUrl(storedImage && storedImage.trim().length > 0 ? storedImage : null);
+    setGeneratedImageUrls(storedList.slice(-2));
+    setSelectedImageIndex(Math.max(0, storedList.length - 1));
     setGenerateDebug(storedDebug ? storedDebug.split('\n').filter(Boolean) : []);
     setGenerateError(null);
-  }, [selectedDate]);
+  }, [selectedDate, getDailyReportImages]);
 
   useEffect(() => {
     const dateFromQuery = searchParams.get('date');
@@ -208,6 +236,23 @@ export default function DailyReportView() {
       setSelectedDate(dateFromQuery);
     }
   }, [searchParams, selectedDate]);
+
+  const reportDates = useMemo(() => {
+    const fromHistory = history.map((record) => record.date);
+    const fromCloud = Object.keys(dailyReportImagesByDate || {});
+    const fromLocal = new Set<string>();
+
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(REPORT_IMAGE_LIST_STORAGE_PREFIX)) continue;
+      const date = key.slice(REPORT_IMAGE_LIST_STORAGE_PREFIX.length);
+      if (date) fromLocal.add(date);
+    }
+
+    return Array.from(new Set([...fromHistory, ...fromCloud, ...Array.from(fromLocal)])).sort((a, b) =>
+      a > b ? -1 : 1
+    );
+  }, [history, dailyReportImagesByDate]);
 
   const handleGenerateReport = async (
     trigger: 'manual' | 'autogen' = 'manual'
@@ -249,16 +294,26 @@ export default function DailyReportView() {
     try {
       const result = await invokeGenerateDailyReportImage(dailyImagePrompt);
       const nextDebug = [...startDebug, ...result.debugLogs, `${debugTimestamp()} source=${result.source}`];
+      const nextImages = [...generatedImageUrls, result.imageDataUrl].slice(-2);
       localStorage.setItem(getImageStorageKey(selectedDate), result.imageDataUrl);
+      localStorage.setItem(getImageListStorageKey(selectedDate), JSON.stringify(nextImages));
       localStorage.setItem(getDebugStorageKey(selectedDate), nextDebug.join('\n'));
-      setGeneratedImageUrl(result.imageDataUrl);
+      setGeneratedImageUrls(nextImages);
+      setSelectedImageIndex(Math.max(0, nextImages.length - 1));
       setGenerateDebug(nextDebug);
+      addDailyReportImage(selectedDate, {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        imageDataUrl: result.imageDataUrl,
+        promptPayload: dailyImagePromptPayload,
+        debugLogs: nextDebug,
+        createdAt: Date.now()
+      });
       incrementDailyReportGenerationCount(generationDateKey, user?.id);
     } catch (error) {
       const debugLogs = (error as GenerateDebugError).debugLogs ?? startDebug;
       localStorage.setItem(getDebugStorageKey(selectedDate), debugLogs.join('\n'));
       setGenerateDebug(debugLogs);
-      setGenerateError('图片生成失败，稍后再试');
+      setGenerateError(normalizeGenerateError(error));
     } finally {
       isGeneratingRef.current = false;
       setIsGenerating(false);
@@ -294,21 +349,42 @@ export default function DailyReportView() {
       nextParams.delete('autogen');
       setSearchParams(nextParams, { replace: true });
     })();
-  }, [
-    searchParams,
-    selectedDate,
-    selectedRecord,
-    isLoggedIn,
-    user?.id,
-    setSearchParams
-  ]);
+  }, [searchParams, selectedDate, selectedRecord, isLoggedIn, user?.id, setSearchParams]);
 
-  const handleDownloadReport = () => {
+  const handleDownloadReport = async () => {
     if (!generatedImageUrl) return;
-    const link = document.createElement('a');
-    link.href = generatedImageUrl;
-    link.download = `clawdmate-report-${selectedDate}.png`;
-    link.click();
+    const filename = `clawdmate-report-${selectedDate}.png`;
+
+    try {
+      let downloadUrl = generatedImageUrl;
+      let tempObjectUrl: string | null = null;
+
+      // For remote URLs, fetch as blob first to improve download compatibility.
+      if (!generatedImageUrl.startsWith('data:') && !generatedImageUrl.startsWith('blob:')) {
+        const response = await fetch(generatedImageUrl);
+        if (!response.ok) {
+          throw new Error(`download_failed_${response.status}`);
+        }
+        const blob = await response.blob();
+        tempObjectUrl = URL.createObjectURL(blob);
+        downloadUrl = tempObjectUrl;
+      }
+
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      if (tempObjectUrl) {
+        URL.revokeObjectURL(tempObjectUrl);
+      }
+      showToast('日报图片已开始下载');
+    } catch (error) {
+      console.error('[daily-report] download failed', error);
+      showToast('下载失败，请稍后重试');
+    }
   };
 
   return (
@@ -333,7 +409,9 @@ export default function DailyReportView() {
           ) : null}
           <button
             type="button"
-            onClick={handleDownloadReport}
+            onClick={() => {
+              void handleDownloadReport();
+            }}
             disabled={!generatedImageUrl}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-border-main rounded-xl text-xs font-bold hover:bg-stone-50 transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
           >
@@ -372,13 +450,9 @@ export default function DailyReportView() {
                 <div className="h-full max-h-full max-w-full aspect-[4/5]">
                   <div className="h-full w-full rounded-[24px] border border-dashed border-border-main/60 bg-[#FFFDF9] flex items-center justify-center overflow-hidden">
                     {generatedImageUrl ? (
-                      <img
-                        src={generatedImageUrl}
-                        alt={`Daily report for ${selectedDate}`}
-                        className="w-full h-full object-contain"
-                      />
+                      <img src={generatedImageUrl} alt={`Daily report for ${selectedDate}`} className="w-full h-full object-contain" />
                     ) : isGenerating ? (
-                      <div className="w-full h-full flex items-center justify-center px-8 md:px-12">
+                      <div className="w-full h-full flex flex-col items-center justify-center gap-5 px-8 md:px-12">
                         <div className="daily-report-loader" aria-live="polite" aria-label="正在生成日报">
                           <span className="daily-report-loader__circle" />
                           <span className="daily-report-loader__circle" />
@@ -387,6 +461,7 @@ export default function DailyReportView() {
                           <span className="daily-report-loader__shadow" />
                           <span className="daily-report-loader__shadow" />
                         </div>
+                        <p className="text-sm font-semibold text-stone-500">正在生成日报，请稍等</p>
                       </div>
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center gap-6 px-8 md:px-12 text-center">
@@ -415,6 +490,26 @@ export default function DailyReportView() {
                   </div>
                 </div>
               </div>
+
+              {generatedImageUrls.length > 1 ? (
+                <div className="flex items-center justify-center gap-2">
+                  {generatedImageUrls.map((_, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setSelectedImageIndex(idx)}
+                      className={cn(
+                        'px-3 py-1 rounded-lg border text-xs font-bold transition-all',
+                        idx === selectedImageIndex
+                          ? 'bg-primary text-white border-primary'
+                          : 'bg-white text-stone-500 border-border-main hover:text-ink'
+                      )}
+                    >
+                      图 {idx + 1}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </motion.div>
         </div>
@@ -422,32 +517,55 @@ export default function DailyReportView() {
         <div className="space-y-6 min-h-0">
           <div className="bg-paper-mist/30 border border-border-main rounded-[24px] p-5 space-y-4 max-h-full overflow-auto">
             <h4 className="text-xs font-bold text-ink uppercase tracking-widest px-2">历史日报存档</h4>
+
             <div className="space-y-2">
-              {history.length > 0 ? (
-                history.map((record) => (
+              {reportDates.length > 0 ? (
+                reportDates.map((date) => (
                   <button
-                    key={record.date}
+                    key={date}
                     type="button"
                     onClick={() => {
-                      setSelectedDate(record.date);
+                      setSelectedDate(date);
                       const nextParams = new URLSearchParams(searchParams);
-                      nextParams.set('date', record.date);
+                      nextParams.set('date', date);
                       nextParams.delete('autogen');
                       setSearchParams(nextParams, { replace: true });
                     }}
                     className={cn(
-                      'w-full flex items-center justify-between p-3 rounded-xl transition-all border text-sm font-bold',
-                      selectedDate === record.date
-                        ? 'bg-white border-primary/20 text-primary shadow-sm'
-                        : 'bg-transparent border-transparent text-stone-400 hover:bg-white hover:border-border-main hover:text-ink'
+                      'w-full flex items-center justify-between p-3 rounded-xl transition-all border text-sm font-bold bg-white',
+                      selectedDate === date
+                        ? 'border-primary/20 text-primary shadow-sm'
+                        : 'border-border-main/70 text-stone-500 hover:border-border-main hover:text-ink'
                     )}
                   >
-                    <span>{record.date}</span>
-                    <span className="text-[10px] opacity-60">{record.tasks.length} 项</span>
+                    <span>{date}</span>
+                    <span className="text-[10px] opacity-60">查看</span>
                   </button>
                 ))
               ) : (
-                <p className="text-stone-300 text-center py-8 text-xs italic">暂无历史记录</p>
+                <p className="text-stone-300 text-center py-8 text-xs italic">暂无已生成日报</p>
+              )}
+            </div>
+
+            <div className="px-2 space-y-2 border-t border-border-main/40 pt-3">
+              {generatedImageUrls.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {generatedImageUrls.map((url, idx) => (
+                    <button
+                      key={`${selectedDate}-${idx}`}
+                      type="button"
+                      onClick={() => setSelectedImageIndex(idx)}
+                      className={cn(
+                        'aspect-[3/4] max-w-[110px] rounded-lg overflow-hidden border',
+                        idx === selectedImageIndex ? 'border-primary shadow-sm' : 'border-border-main/60'
+                      )}
+                    >
+                      <img src={url} alt={`report thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-stone-400">该日期还没有已生成图片。</p>
               )}
             </div>
           </div>

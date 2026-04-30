@@ -67,6 +67,21 @@ create table if not exists public.task_history (
 create index if not exists idx_task_history_user_id on public.task_history(user_id);
 create index if not exists idx_task_history_created_at on public.task_history(created_at desc);
 
+-- daily_report_images (store up to latest 2 images per date in app logic)
+create table if not exists public.daily_report_images (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  report_date date not null,
+  image_data_url text not null,
+  prompt_payload text,
+  debug_logs jsonb,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_daily_report_images_user_id on public.daily_report_images(user_id);
+create index if not exists idx_daily_report_images_report_date on public.daily_report_images(report_date desc);
+create index if not exists idx_daily_report_images_created_at on public.daily_report_images(created_at desc);
+
 -- updated_at trigger
 create or replace function public.set_updated_at()
 returns trigger
@@ -117,6 +132,7 @@ alter table public.profiles enable row level security;
 alter table public.tasks enable row level security;
 alter table public.subtasks enable row level security;
 alter table public.task_history enable row level security;
+alter table public.daily_report_images enable row level security;
 
 -- profiles policies
 drop policy if exists "profiles_select_own" on public.profiles;
@@ -199,4 +215,26 @@ with check (auth.uid() = user_id);
 drop policy if exists "task_history_delete_own" on public.task_history;
 create policy "task_history_delete_own"
 on public.task_history for delete
+using (auth.uid() = user_id);
+
+-- daily_report_images policies
+drop policy if exists "daily_report_images_select_own" on public.daily_report_images;
+create policy "daily_report_images_select_own"
+on public.daily_report_images for select
+using (auth.uid() = user_id);
+
+drop policy if exists "daily_report_images_insert_own" on public.daily_report_images;
+create policy "daily_report_images_insert_own"
+on public.daily_report_images for insert
+with check (auth.uid() = user_id);
+
+drop policy if exists "daily_report_images_update_own" on public.daily_report_images;
+create policy "daily_report_images_update_own"
+on public.daily_report_images for update
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "daily_report_images_delete_own" on public.daily_report_images;
+create policy "daily_report_images_delete_own"
+on public.daily_report_images for delete
 using (auth.uid() = user_id);

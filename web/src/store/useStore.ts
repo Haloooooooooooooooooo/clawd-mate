@@ -5,10 +5,11 @@
 
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { Task, TaskStatus, DailyRecord, User, SubtaskStatus, ToastMessage } from '../types';
+import { Task, TaskStatus, DailyRecord, DailyReportImage, User, SubtaskStatus, ToastMessage } from '../types';
 import { getLocalDateKey, getTaskHistoryDateKey, getTaskTerminalTimestamp } from '../lib/date';
 import { BridgeTaskPayload, pushTaskFromWeb, setIslandVisibility } from '../lib/islandBridge';
 import { loadCloudSnapshot, saveCloudSnapshot } from '../lib/taskRepository';
+import { getTaskActualDurationSeconds } from '../lib/taskTime';
 
 type BridgeTaskStatus = 'active' | 'paused' | 'completed' | 'cancelled';
 type AddTaskOptions = {
@@ -92,12 +93,36 @@ function getEffectiveElapsedSeconds(task: Task, now = Date.now()): number {
   return Math.max(0, task.totalDuration - getEffectiveRemainingTime(task, now));
 }
 
+function getOvertimeStartedAt(task: Task, now = Date.now()): number | undefined {
+  if (typeof task.overtimeStartedAt === 'number' && Number.isFinite(task.overtimeStartedAt)) {
+    return task.overtimeStartedAt;
+  }
+  if (task.status === 'running') {
+    const reachesZeroAt = task.startTime + Math.max(0, task.remainingTime) * 1000;
+    if (now >= reachesZeroAt) {
+      return reachesZeroAt;
+    }
+  }
+  return undefined;
+}
+
+function computeFinalActualDurationSeconds(task: Task, endTime: number): number {
+  const overtimeStartedAt = getOvertimeStartedAt(task, endTime);
+  const effectiveRemaining = getEffectiveRemainingTime(task, endTime);
+  const baseElapsed = Math.max(0, task.totalDuration - effectiveRemaining);
+  if (typeof overtimeStartedAt !== 'number') {
+    return baseElapsed;
+  }
+  const overtimeSeconds = Math.max(0, Math.floor((endTime - overtimeStartedAt) / 1000));
+  return Math.max(baseElapsed, task.totalDuration + overtimeSeconds);
+}
+
 function buildBridgePayload(task: Task, statusOverride?: TaskStatus, focusedOverride?: boolean): BridgeTaskPayload {
   const now = Date.now();
   const status = statusOverride ?? task.status;
   const elapsedSeconds = status === 'running'
     ? getEffectiveElapsedSeconds(task, now)
-    : Math.max(0, task.totalDuration - task.remainingTime);
+    : getTaskActualDurationSeconds(task);
   const normalizedSubtasks = normalizeSubtasksForBridge(task);
   return {
     sync_id: task.syncId || task.id,
@@ -118,6 +143,9 @@ function buildBridgePayload(task: Task, statusOverride?: TaskStatus, focusedOver
 interface AppState {
   tasks: Task[];
   history: DailyRecord[];
+  dailyReportImagesByDate: Record<string, DailyReportImage[]>;
+  lastGuestHistoryMutationAt: number;
+  lastGuestHistoryImportedAt: number;
   recentCelebrationAt: number;
   reportGenerationCountByUserAndDate: Record<string, number>;
   closedSyncIds: Record<string, 'done' | 'cancelled'>;
@@ -160,6 +188,8 @@ interface AppState {
   triggerCelebration: () => void;
   getDailyReportGenerationCount: (date: string, userId?: string | null) => number;
   incrementDailyReportGenerationCount: (date: string, userId?: string | null) => void;
+  getDailyReportImages: (date: string) => DailyReportImage[];
+  addDailyReportImage: (date: string, image: Omit<DailyReportImage, 'date'>) => void;
   hydrateCloudData: (userId: string, options?: { guestHistoryToImport?: DailyRecord[] }) => Promise<void>;
   syncCloudData: (options?: { historyOnly?: boolean }) => Promise<void>;
   toggleIsland: () => void;
@@ -187,6 +217,9 @@ export const useStore = create<AppState>()(
     (set, get) => ({
       tasks: [],
       history: [],
+      dailyReportImagesByDate: {},
+      lastGuestHistoryMutationAt: 0,
+      lastGuestHistoryImportedAt: 0,
       recentCelebrationAt: 0,
       reportGenerationCountByUserAndDate: {},
       closedSyncIds: {},
@@ -231,7 +264,9 @@ export const useStore = create<AppState>()(
           state.tasks.some(
             (task) => task.id === state.activeTaskId && (task.status === 'running' || task.status === 'paused')
           );
-        const shouldSwitchActive = !hasFocusedTask;
+        // Web-side manual add should not steal focus from current task.
+        // Only synced tasks may auto-focus when there is no focused active task.
+        const shouldSwitchActive = options?.source === 'sync' && !hasFocusedTask;
         const nextState = {
           tasks: [...state.tasks, newTask],
           activeTaskId: shouldSwitchActive ? newTask.id : state.activeTaskId
@@ -349,6 +384,7 @@ export const useStore = create<AppState>()(
             title,
             totalDuration,
             remainingTime,
+            actualDurationSeconds: elapsedSeconds,
             startTime: mappedStatus === 'running' ? Date.now() : Date.now() - elapsedSeconds * 1000,
             status: mappedStatus,
             subtasks: incomingSubtasks.map((subtask) => ({
@@ -376,11 +412,13 @@ export const useStore = create<AppState>()(
         }
 
         if (isTerminal) {
+          const guestMutationAt = !state.isLoggedIn ? Date.now() : state.lastGuestHistoryMutationAt;
           const finalizedTask: Task = {
             ...existingTask,
             title,
             totalDuration,
             remainingTime,
+            actualDurationSeconds: elapsedSeconds,
             status: mappedStatus,
             endTime: Date.now()
           };
@@ -391,6 +429,7 @@ export const useStore = create<AppState>()(
                 ? null
                 : state.activeTaskId,
             history: appendHistory(state.history, finalizedTask),
+            lastGuestHistoryMutationAt: guestMutationAt,
             recentCelebrationAt: mappedStatus === 'done' ? Date.now() : state.recentCelebrationAt,
             closedSyncIds: {
               ...state.closedSyncIds,
@@ -425,6 +464,7 @@ export const useStore = create<AppState>()(
                       status: 'running' as const,
                       // Bridge is source of truth when packet is newer.
                       remainingTime: bridgeRemaining,
+                      actualDurationSeconds: elapsedSeconds,
                       startTime: now,
                       subtasks: incomingSubtasks.map((subtask, index) => ({
                         id: task.subtasks[index]?.id || Math.random().toString(36).substring(7),
@@ -439,6 +479,7 @@ export const useStore = create<AppState>()(
                     title,
                     totalDuration,
                     remainingTime: bridgeRemaining,
+                    actualDurationSeconds: elapsedSeconds,
                     status: nextStatus,
                     startTime: task.startTime,
                     subtasks: incomingSubtasks.map((subtask, index) => ({
@@ -484,11 +525,13 @@ export const useStore = create<AppState>()(
             if (task.id !== id) return task;
 
             if (status === 'paused' && task.status === 'running') {
+              const overtimeStartedAt = getOvertimeStartedAt(task);
               return {
                 ...task,
                 status: 'paused',
                 remainingTime: getEffectiveRemainingTime(task),
-                startTime: Date.now()
+                startTime: Date.now(),
+                overtimeStartedAt: overtimeStartedAt ?? task.overtimeStartedAt
               };
             }
 
@@ -674,19 +717,25 @@ export const useStore = create<AppState>()(
       completeTask: (id) => set((state) => {
         const task = state.tasks.find((item) => item.id === id);
         if (!task) return state;
+        const endTime = Date.now();
+        const finalActualDurationSeconds = computeFinalActualDurationSeconds(task, endTime);
 
         const finalizedTask: Task = {
           ...task,
           status: 'done',
           remainingTime: getEffectiveRemainingTime(task),
-          endTime: Date.now()
+          actualDurationSeconds: finalActualDurationSeconds,
+          overtimeStartedAt: getOvertimeStartedAt(task, endTime) ?? task.overtimeStartedAt,
+          endTime
         };
         void pushTaskFromWeb(buildBridgePayload(finalizedTask, 'done'));
         const syncId = task.syncId || task.id;
+        const guestMutationAt = !state.isLoggedIn ? Date.now() : state.lastGuestHistoryMutationAt;
         const nextState = {
           tasks: state.tasks.filter((item) => item.id !== id),
           activeTaskId: state.activeTaskId === id ? null : state.activeTaskId,
           history: appendHistory(state.history, finalizedTask),
+          lastGuestHistoryMutationAt: guestMutationAt,
           recentCelebrationAt: Date.now(),
           closedSyncIds: {
             ...state.closedSyncIds,
@@ -702,19 +751,25 @@ export const useStore = create<AppState>()(
       cancelTask: (id) => set((state) => {
         const task = state.tasks.find((item) => item.id === id);
         if (!task) return state;
+        const endTime = Date.now();
+        const finalActualDurationSeconds = computeFinalActualDurationSeconds(task, endTime);
 
         const finalizedTask: Task = {
           ...task,
           status: 'cancelled',
           remainingTime: getEffectiveRemainingTime(task),
-          endTime: Date.now()
+          actualDurationSeconds: finalActualDurationSeconds,
+          overtimeStartedAt: getOvertimeStartedAt(task, endTime) ?? task.overtimeStartedAt,
+          endTime
         };
         void pushTaskFromWeb(buildBridgePayload(finalizedTask, 'cancelled'));
         const syncId = task.syncId || task.id;
+        const guestMutationAt = !state.isLoggedIn ? Date.now() : state.lastGuestHistoryMutationAt;
         const nextState = {
           tasks: state.tasks.filter((item) => item.id !== id),
           activeTaskId: state.activeTaskId === id ? null : state.activeTaskId,
           history: appendHistory(state.history, finalizedTask),
+          lastGuestHistoryMutationAt: guestMutationAt,
           closedSyncIds: {
             ...state.closedSyncIds,
             [syncId]: 'cancelled'
@@ -772,6 +827,9 @@ export const useStore = create<AppState>()(
           user: isLoggedIn ? user : null,
           tasks: shouldClearData ? [] : state.tasks,
           history: shouldClearData ? [] : state.history,
+          dailyReportImagesByDate: shouldClearData ? {} : state.dailyReportImagesByDate,
+          lastGuestHistoryMutationAt: shouldClearData ? 0 : state.lastGuestHistoryMutationAt,
+          lastGuestHistoryImportedAt: shouldClearData ? 0 : state.lastGuestHistoryImportedAt,
           activeTaskId: shouldClearData ? null : state.activeTaskId,
           closedSyncIds: shouldClearData ? {} : state.closedSyncIds,
           lastTaskSyncAtById: shouldClearData ? {} : state.lastTaskSyncAtById,
@@ -817,20 +875,60 @@ export const useStore = create<AppState>()(
           };
         }),
 
+      getDailyReportImages: (date) => {
+        const list = get().dailyReportImagesByDate[date] || [];
+        return [...list].sort((a, b) => a.createdAt - b.createdAt);
+      },
+
+      addDailyReportImage: (date, image) =>
+        set((state) => {
+          const existing = state.dailyReportImagesByDate[date] || [];
+          const next = [...existing, { ...image, date }]
+            .sort((a, b) => a.createdAt - b.createdAt)
+            .slice(-2);
+          const nextState = {
+            dailyReportImagesByDate: {
+              ...state.dailyReportImagesByDate,
+              [date]: next
+            }
+          };
+          if (state.isLoggedIn && state.user?.id) {
+            queueCloudSync();
+          }
+          return nextState;
+        }),
+
       hydrateCloudData: async (userId, options) => {
         const guestHistory = options?.guestHistoryToImport || [];
-
-        if (guestHistory.length > 0) {
-          // Guest to logged-in migration: persist current local history to cloud first.
-          await saveCloudSnapshot(userId, [], guestHistory, { historyOnly: true });
-        }
-
+        const guestMutationAt = get().lastGuestHistoryMutationAt;
+        const guestImportedAt = get().lastGuestHistoryImportedAt;
+        const shouldImportGuestHistory =
+          guestHistory.length > 0 && guestMutationAt > 0 && guestMutationAt > guestImportedAt;
         const snapshot = await loadCloudSnapshot(userId);
+        let mergedHistory = snapshot.history || [];
+        let nextGuestHistoryImportedAt = guestImportedAt;
+
+        if (shouldImportGuestHistory) {
+          const cloudHasHistory = mergedHistory.length > 0;
+          if (!cloudHasHistory) {
+            // Only seed cloud history when cloud is empty, to avoid overwriting existing records.
+            await saveCloudSnapshot(userId, [], guestHistory, get().dailyReportImagesByDate, { historyOnly: true });
+            const refreshed = await loadCloudSnapshot(userId);
+            mergedHistory = refreshed.history || [];
+            nextGuestHistoryImportedAt = guestMutationAt;
+          } else {
+            // Cloud already has data; keep cloud as source of truth and avoid destructive overwrite.
+            mergedHistory = snapshot.history || [];
+            nextGuestHistoryImportedAt = guestMutationAt;
+          }
+        }
 
         set((state) => ({
           ...state,
           tasks: snapshot.tasks || [],
-          history: snapshot.history || [],
+          history: mergedHistory,
+          lastGuestHistoryImportedAt: nextGuestHistoryImportedAt,
+          dailyReportImagesByDate: snapshot.dailyReportImages || {},
           activeTaskId: null,
           closedSyncIds: {},
           lastTaskSyncAtById: {},
@@ -843,7 +941,7 @@ export const useStore = create<AppState>()(
       syncCloudData: async (options) => {
         const state = get();
         if (!state.isLoggedIn || !state.user?.id) return;
-        await saveCloudSnapshot(state.user.id, state.tasks, state.history, options);
+        await saveCloudSnapshot(state.user.id, state.tasks, state.history, state.dailyReportImagesByDate, options);
       },
 
       toggleIsland: () =>
@@ -865,6 +963,9 @@ export const useStore = create<AppState>()(
             ...rest,
             tasks: [],
             history: [],
+            dailyReportImagesByDate: {},
+            lastGuestHistoryMutationAt: 0,
+            lastGuestHistoryImportedAt: 0,
             activeTaskId: null,
             closedSyncIds: {},
             lastTaskSyncAtById: {},

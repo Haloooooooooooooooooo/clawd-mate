@@ -43,6 +43,7 @@ export function CollapsedView({
     ? '时间到了!'
     : `剩余时间: ${remainingMinutes}:${remainingRemainSeconds.toString().padStart(2, '0')}`
 
+    
   return (
     <motion.div
       role="button"
@@ -74,10 +75,10 @@ export function CollapsedView({
           event.stopPropagation()
           onCloseIsland()
         }}
-        className="absolute right-2 top-2 z-30 flex h-6 w-6 items-center justify-center rounded-[6px] border border-orange-300/70 bg-orange-500/85 text-sm font-bold text-white opacity-0 scale-90 transition-all hover:bg-orange-400 group-hover:scale-100 group-hover:opacity-100 group-focus-within:scale-100 group-focus-within:opacity-100"
+        className="absolute right-2 top-2 z-30 flex h-6 w-6 items-center justify-center rounded-[6px] bg-[#3fffd5] text-sm font-light text-black opacity-0 scale-90 transition-all hover:bg-[#2fd3aa] group-hover:scale-100 group-hover:opacity-100 group-focus-within:scale-100 group-focus-within:opacity-100"
         aria-label="Close island"
       >
-        x
+        ✕
       </button>
 
       <div className="relative overflow-hidden rounded-[999px] border border-white/12 bg-[rgba(9,11,14,0.9)] px-3 py-2 shadow-[0_20px_55px_rgba(0,0,0,0.46),inset_0_0_40px_rgba(0,0,0,0.6)] backdrop-blur-[20px]">
