@@ -3,6 +3,17 @@ import { useNavigate } from 'react-router-dom';
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
+  const desktopDownloadUrl = import.meta.env.VITE_DESKTOP_DOWNLOAD_URL || 'https://github.com';
+  const normalizedDesktopDownloadUrl = desktopDownloadUrl.startsWith('http')
+    ? desktopDownloadUrl
+    : `https://${desktopDownloadUrl}`;
+
+  const openDesktopDownload = () => {
+    const win = window.open(normalizedDesktopDownloadUrl, '_blank', 'noopener,noreferrer');
+    if (!win) {
+      window.location.href = normalizedDesktopDownloadUrl;
+    }
+  };
 
   return (
     <div className="h-screen w-full bg-bg-primary text-text-dark flex flex-col relative overflow-hidden font-body">
@@ -55,13 +66,22 @@ const LandingPage: React.FC = () => {
               不用复杂的 To-Do List，简单、温和、无压力。<br />
               让 Clawd 陪你一起专注学习，享受每一刻成长。
             </p>
-            <button
-              type="button"
-              onClick={() => navigate('/app/dashboard')}
-              className="button-3d ml-10"
-            >
-              开始专注<span className="inline-block transition-transform group-hover:translate-x-1">→</span>
-            </button>
+            <div className="ml-10 flex items-center gap-6">
+              <button
+                type="button"
+                onClick={() => navigate('/app/dashboard')}
+                className="button-3d"
+              >
+                开始专注<span className="inline-block transition-transform group-hover:translate-x-1">→</span>
+              </button>
+              <button
+                type="button"
+                onClick={openDesktopDownload}
+                className="button-3d !bg-white !text-ink !shadow-[6px_6px_0_#E6BE9E] hover:!bg-[#fffaf4]"
+              >
+                下载桌面版
+              </button>
+            </div>
           </div>
         </div>
 

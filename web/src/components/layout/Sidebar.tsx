@@ -15,6 +15,7 @@ import { getUserWithProfile, upsertUserProfile } from '../../lib/profileReposito
 
 export default function Sidebar() {
   const [showLogout, setShowLogout] = useState(false);
+  const [showIslandDownloadModal, setShowIslandDownloadModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authName, setAuthName] = useState('');
   const [authEmail, setAuthEmail] = useState('');
@@ -36,6 +37,13 @@ export default function Sidebar() {
     closeLoginModal,
     showToast
   } = useStore();
+  const desktopDownloadUrl = import.meta.env.VITE_DESKTOP_DOWNLOAD_URL || 'https://github.com';
+  const normalizedDesktopDownloadUrl = desktopDownloadUrl.startsWith('http')
+    ? desktopDownloadUrl
+    : `https://${desktopDownloadUrl}`;
+  const isDesktopRuntime =
+    typeof window !== 'undefined' &&
+    Boolean((window as unknown as { __TAURI__?: unknown }).__TAURI__);
 
   useEffect(() => {
     let cancelled = false;
@@ -241,6 +249,21 @@ export default function Sidebar() {
     }
   };
 
+  const handleToggleIslandClick = () => {
+    if (!isDesktopRuntime) {
+      setShowIslandDownloadModal(true);
+      return;
+    }
+    toggleIsland();
+  };
+
+  const openDesktopDownload = () => {
+    const win = window.open(normalizedDesktopDownloadUrl, '_blank', 'noopener,noreferrer');
+    if (!win) {
+      window.location.href = normalizedDesktopDownloadUrl;
+    }
+  };
+
   return (
     <aside className="fixed left-0 top-0 z-50 flex h-screen w-[280px] shrink-0 flex-col border-r-2 border-border-sidebar bg-sidebar-bg">
       <div className="border-b-2 border-border-sidebar bg-warm-paper px-5 py-6">
@@ -301,7 +324,7 @@ export default function Sidebar() {
           </Link>
 
           <button
-            onClick={toggleIsland}
+            onClick={handleToggleIslandClick}
             className={cn(
               'flex min-h-[62px] w-full items-center justify-center gap-3 px-5 py-4 text-[16px] font-semibold tracking-[0.03em] pixel-button-primary',
               isIslandVisible ? 'opacity-95' : ''
@@ -380,6 +403,47 @@ export default function Sidebar() {
       </div>
 
       <AnimatePresence>
+        {showIslandDownloadModal && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowIslandDownloadModal(false)}
+              className="absolute inset-0 bg-ink/40"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 16 }}
+              className="relative w-full max-w-md overflow-hidden border-2 border-border-main bg-o5 p-6 shadow-[5px_5px_0_var(--color-o3)] paper-texture"
+            >
+              <h3 className="text-xl font-display font-bold text-ink">先下载灵动岛桌面版</h3>
+              <p className="mt-2 text-sm text-muted-text">
+                网页端无法直接召唤系统级灵动岛。请先下载安装桌面版，再使用“召唤灵动岛”功能。
+              </p>
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowIslandDownloadModal(false)}
+                  className="px-4 py-2 rounded-lg border border-border-main bg-white/70 text-sm font-semibold text-ink hover:bg-white"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    openDesktopDownload();
+                    setShowIslandDownloadModal(false);
+                  }}
+                  className="px-4 py-2 rounded-lg bg-primary text-sm font-semibold text-white hover:opacity-90"
+                >
+                  下载桌面版
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
         {isLoginModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div
