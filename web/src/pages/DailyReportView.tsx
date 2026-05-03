@@ -33,6 +33,30 @@ type GenerateDailyReportResult = {
   debugLogs: string[];
 };
 
+async function resolveReportImageBlob(imageUrl: string): Promise<Blob> {
+  if (imageUrl.startsWith('data:')) {
+    const response = await fetch(imageUrl);
+    return response.blob();
+  }
+
+  const response = await fetch(imageUrl);
+  if (!response.ok) {
+    throw new Error(`image_fetch_failed_${response.status}`);
+  }
+  return response.blob();
+}
+
+function triggerDirectDownload(url: string, filename: string) {
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.rel = 'noopener noreferrer';
+  link.target = '_blank';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
 function getImageStorageKey(date: string) {
   return `${REPORT_IMAGE_STORAGE_PREFIX}${date}`;
 }
@@ -187,6 +211,7 @@ export default function DailyReportView() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [generateDebug, setGenerateDebug] = useState<string[]>([]);
+  const [failedImageUrls, setFailedImageUrls] = useState<Record<string, true>>({});
 
   const isGeneratingRef = useRef(false);
   const handledAutogenRef = useRef<string | null>(null);
@@ -197,13 +222,14 @@ export default function DailyReportView() {
   const dailyImagePromptPayload = buildDailyImagePromptPayload(dailyImageSummary);
   const dailyImagePrompt = buildDailyImagePrompt(dailyImagePromptData);
   const generatedImageUrl = generatedImageUrls[selectedImageIndex] || null;
+  const selectedImageLoadFailed = generatedImageUrl ? Boolean(failedImageUrls[generatedImageUrl]) : false;
 
   useEffect(() => {
     const cloudImages = getDailyReportImages(selectedDate);
     if (cloudImages.length > 0) {
-      const urls = cloudImages.map((item) => item.imageDataUrl);
+      const urls = cloudImages.map((item) => item.imageDataUrl).filter((item) => item.trim().length > 0).slice(-2);
       setGeneratedImageUrls(urls);
-      setSelectedImageIndex(Math.max(0, urls.length - 1));
+      setSelectedImageIndex(urls.length > 0 ? urls.length - 1 : 0);
       return;
     }
 
@@ -224,10 +250,12 @@ export default function DailyReportView() {
       storedList = [legacyImage];
     }
     const storedDebug = localStorage.getItem(getDebugStorageKey(selectedDate));
-    setGeneratedImageUrls(storedList.slice(-2));
-    setSelectedImageIndex(Math.max(0, storedList.length - 1));
+    const visibleImages = storedList.slice(-2);
+    setGeneratedImageUrls(visibleImages);
+    setSelectedImageIndex(visibleImages.length > 0 ? visibleImages.length - 1 : 0);
     setGenerateDebug(storedDebug ? storedDebug.split('\n').filter(Boolean) : []);
     setGenerateError(null);
+    setFailedImageUrls({});
   }, [selectedDate, getDailyReportImages]);
 
   useEffect(() => {
@@ -356,10 +384,26 @@ export default function DailyReportView() {
     const filename = `clawdmate-report-${selectedDate}.png`;
 
     try {
+      // Data/blob URLs are safe to download directly.
+      if (generatedImageUrl.startsWith('data:') || generatedImageUrl.startsWith('blob:')) {
+        triggerDirectDownload(generatedImageUrl, filename);
+        showToast('日报图片已开始下载');
+        return;
+      }
+
+      // For cross-origin URLs (e.g. OSS without CORS), direct download works better than fetch->blob.
+      triggerDirectDownload(generatedImageUrl, filename);
+      showToast('日报图片已开始下载');
+      return;
+    } catch (error) {
+      console.error('[daily-report] direct download failed', error);
+    }
+
+    try {
+      // Fallback: fetch as blob when direct method is blocked.
       let downloadUrl = generatedImageUrl;
       let tempObjectUrl: string | null = null;
 
-      // For remote URLs, fetch as blob first to improve download compatibility.
       if (!generatedImageUrl.startsWith('data:') && !generatedImageUrl.startsWith('blob:')) {
         const response = await fetch(generatedImageUrl);
         if (!response.ok) {
@@ -384,6 +428,73 @@ export default function DailyReportView() {
     } catch (error) {
       console.error('[daily-report] download failed', error);
       showToast('下载失败，请稍后重试');
+    }
+  };
+
+  const handleShareReport = async () => {
+    if (!generatedImageUrl) {
+      showToast('请先生成日报图片');
+      return;
+    }
+
+    const filename = `clawdmate-report-${selectedDate}.png`;
+
+    try {
+      const nav = navigator as Navigator & {
+        canShare?: (data: ShareData) => boolean;
+      };
+
+      if (typeof nav.share === 'function') {
+        const baseShareData: ShareData = {
+          title: `ClawdMate 日报 ${selectedDate}`,
+          text: `这是我在 ClawdMate 生成的每日复盘 (${selectedDate})`
+        };
+
+        // For remote URLs, share URL/text directly to avoid CORS fetch failures.
+        if (!generatedImageUrl.startsWith('data:') && !generatedImageUrl.startsWith('blob:')) {
+          const urlShareData: ShareData = {
+            ...baseShareData,
+            url: generatedImageUrl
+          };
+          await nav.share(urlShareData);
+          showToast('已打开系统分享');
+          return;
+        }
+
+        const blob = await resolveReportImageBlob(generatedImageUrl);
+        const file = new File([blob], filename, { type: blob.type || 'image/png' });
+        const fileShareData: ShareData = {
+          ...baseShareData,
+          files: [file]
+        };
+        if (!nav.canShare || nav.canShare(fileShareData)) {
+          await nav.share(fileShareData);
+          showToast('已打开系统分享');
+          return;
+        }
+      }
+
+      // Clipboard image requires blob; skip this path for cross-origin URLs without CORS.
+      const clipboard = navigator.clipboard as Clipboard & {
+        write?: (data: ClipboardItem[]) => Promise<void>;
+      };
+      if (
+        typeof clipboard?.write === 'function' &&
+        typeof ClipboardItem !== 'undefined' &&
+        (generatedImageUrl.startsWith('data:') || generatedImageUrl.startsWith('blob:'))
+      ) {
+        const blob = await resolveReportImageBlob(generatedImageUrl);
+        const file = new File([blob], filename, { type: blob.type || 'image/png' });
+        await clipboard.write([new ClipboardItem({ [file.type || 'image/png']: file })]);
+        showToast('浏览器不支持系统分享，已复制图片到剪贴板');
+        return;
+      }
+
+      await handleDownloadReport();
+      showToast('浏览器不支持系统分享，已为你下载图片');
+    } catch (error) {
+      console.error('[daily-report] share failed', error);
+      showToast('分享失败，请稍后重试');
     }
   };
 
@@ -420,7 +531,11 @@ export default function DailyReportView() {
           </button>
           <button
             type="button"
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-xs font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/20"
+            onClick={() => {
+              void handleShareReport();
+            }}
+            disabled={!generatedImageUrl}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-xs font-bold hover:opacity-90 transition-all shadow-lg shadow-primary/20 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Share2 size={14} />
             分享日报
@@ -450,7 +565,21 @@ export default function DailyReportView() {
                 <div className="h-full max-h-full max-w-full aspect-[4/5]">
                   <div className="h-full w-full rounded-[24px] border border-dashed border-border-main/60 bg-[#FFFDF9] flex items-center justify-center overflow-hidden">
                     {generatedImageUrl ? (
-                      <img src={generatedImageUrl} alt={`Daily report for ${selectedDate}`} className="w-full h-full object-contain" />
+                      selectedImageLoadFailed ? (
+                        <div className="w-full h-full flex flex-col items-center justify-center gap-3 px-8 text-center">
+                          <p className="text-sm font-semibold text-stone-500">这张日报图片链接已失效</p>
+                          <p className="text-xs text-stone-400">可以切换到另一张，或点击“重新生成”获得新图片。</p>
+                        </div>
+                      ) : (
+                        <img
+                          src={generatedImageUrl}
+                          alt={`Daily report for ${selectedDate}`}
+                          className="w-full h-full object-contain"
+                          onError={() => {
+                            setFailedImageUrls((prev) => ({ ...prev, [generatedImageUrl]: true }));
+                          }}
+                        />
+                      )
                     ) : isGenerating ? (
                       <div className="w-full h-full flex flex-col items-center justify-center gap-5 px-8 md:px-12">
                         <div className="daily-report-loader" aria-live="polite" aria-label="正在生成日报">
@@ -560,7 +689,20 @@ export default function DailyReportView() {
                         idx === selectedImageIndex ? 'border-primary shadow-sm' : 'border-border-main/60'
                       )}
                     >
-                      <img src={url} alt={`report thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
+                      {failedImageUrls[url] ? (
+                        <div className="w-full h-full flex items-center justify-center px-2 text-[10px] font-semibold text-stone-400 bg-stone-50">
+                          链接失效
+                        </div>
+                      ) : (
+                        <img
+                          src={url}
+                          alt={`report thumbnail ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                          onError={() => {
+                            setFailedImageUrls((prev) => ({ ...prev, [url]: true }));
+                          }}
+                        />
+                      )}
                     </button>
                   ))}
                 </div>

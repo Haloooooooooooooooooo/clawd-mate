@@ -1,8 +1,24 @@
-import React from 'react';
+﻿import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'motion/react';
+import { useStore } from '../store/useStore';
+import { getUserWithProfile, upsertUserProfile } from '../lib/profileRepository';
+import { isSupabaseConfigured, supabase } from '../lib/supabase';
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
+  const setLoggedIn = useStore((state) => state.setLoggedIn);
+  const showToast = useStore((state) => state.showToast);
+
+  const [isLoginDrawerOpen, setIsLoginDrawerOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authName, setAuthName] = useState('');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authSuccess, setAuthSuccess] = useState('');
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+
   const desktopDownloadUrl = import.meta.env.VITE_DESKTOP_DOWNLOAD_URL || 'https://github.com';
   const normalizedDesktopDownloadUrl = desktopDownloadUrl.startsWith('http')
     ? desktopDownloadUrl
@@ -12,6 +28,94 @@ const LandingPage: React.FC = () => {
     const win = window.open(normalizedDesktopDownloadUrl, '_blank', 'noopener,noreferrer');
     if (!win) {
       window.location.href = normalizedDesktopDownloadUrl;
+    }
+  };
+
+  const handleLoginClick = () => {
+    setAuthMode('login');
+    setAuthError('');
+    setAuthSuccess('');
+    setIsLoginDrawerOpen(true);
+  };
+
+  const handleCloseLoginDrawer = () => {
+    setAuthMode('login');
+    setAuthName('');
+    setAuthPassword('');
+    setAuthError('');
+    setAuthSuccess('');
+    setIsLoginDrawerOpen(false);
+  };
+
+  const handleAuthSubmit = async () => {
+    if (!authEmail.trim() || !authPassword.trim()) {
+      setAuthError('请输入邮箱和密码');
+      return;
+    }
+    if (authMode === 'register' && !authName.trim()) {
+      setAuthError('请输入用户名');
+      return;
+    }
+    if (!isSupabaseConfigured) {
+      setAuthError('服务暂时不可用，请检查 Supabase 配置后重试');
+      return;
+    }
+
+    setAuthSubmitting(true);
+    setAuthError('');
+    setAuthSuccess('');
+
+    try {
+      if (authMode === 'register') {
+        const displayName = authName.trim();
+        const registerEmail = authEmail.trim();
+        const { data, error } = await supabase.auth.signUp({
+          email: registerEmail,
+          password: authPassword,
+          options: {
+            data: { display_name: displayName }
+          }
+        });
+        if (error) throw error;
+        if (data.user || data.session?.user) {
+          await upsertUserProfile(data.user || data.session!.user, displayName);
+          await supabase.auth.signOut();
+          setLoggedIn(false, null, { clearDataOnLogout: true });
+        }
+        setAuthMode('login');
+        setAuthName('');
+        setAuthEmail(registerEmail);
+        setAuthPassword('');
+        setAuthSuccess('注册成功，请登录');
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: authEmail.trim(),
+          password: authPassword
+        });
+        if (error) throw error;
+        if (!data.user) throw new Error('登录失败，请稍后重试');
+
+        const uiUser = await getUserWithProfile(data.user);
+        setLoggedIn(true, uiUser, { clearDataOnLogout: false });
+        showToast('登录成功');
+        setIsLoginDrawerOpen(false);
+        setAuthPassword('');
+      }
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message.toLowerCase() : '';
+      if (rawMessage.includes('already registered') || rawMessage.includes('user already registered')) {
+        setAuthError('该邮箱已注册，请直接登录');
+      } else if (rawMessage.includes('password should be at least')) {
+        setAuthError('密码长度太短，请至少 6 位');
+      } else if (rawMessage.includes('invalid login credentials') || rawMessage.includes('invalid credentials')) {
+        setAuthError('账号或密码错误');
+      } else if (rawMessage.includes('email not confirmed')) {
+        setAuthError('该邮箱尚未完成验证，请先完成邮箱验证后再登录');
+      } else {
+        setAuthError(authMode === 'login' ? '登录失败，请稍后重试' : '注册失败，请稍后重试');
+      }
+    } finally {
+      setAuthSubmitting(false);
     }
   };
 
@@ -35,7 +139,11 @@ const LandingPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-4">
-          <button className="px-8 py-2.5 rounded-xl bg-white/80 border-none shadow-[2px_2px_0_#F3D4C4] hover:bg-white transition-all cursor-pointer font-bold">
+          <button
+            type="button"
+            onClick={handleLoginClick}
+            className="px-8 py-2.5 rounded-xl bg-white/80 border-none shadow-[2px_2px_0_#F3D4C4] hover:bg-white transition-all cursor-pointer font-bold"
+          >
             登录
           </button>
           <button
@@ -146,6 +254,136 @@ const LandingPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <AnimatePresence>
+        {isLoginDrawerOpen && (
+          <div className="fixed inset-0 z-[120]">
+            <motion.button
+              type="button"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={handleCloseLoginDrawer}
+              className="absolute inset-0 bg-ink/30 backdrop-blur-sm border-0 p-0"
+              aria-label="关闭登录抽屉"
+            />
+
+            <motion.aside
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', stiffness: 340, damping: 34 }}
+              className="absolute right-0 top-0 h-full w-full max-w-md border-l-2 border-border-main bg-o5 p-8 shadow-[-6px_0_0_var(--color-o3)]"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-2xl font-display font-bold text-ink">
+                  {authMode === 'login' ? '登录 ClawdMate' : '注册 ClawdMate'}
+                </h3>
+                <button
+                  type="button"
+                  onClick={handleCloseLoginDrawer}
+                  className="border-0 bg-transparent p-2 text-muted-text shadow-none hover:bg-[#FFF0DF]"
+                  aria-label="关闭"
+                >
+                  <span className="text-2xl leading-none">×</span>
+                </button>
+              </div>
+
+              <p className="mt-2 text-sm text-muted-text">
+                {authMode === 'login' ? '登录后可同步你的任务与日报记录' : '创建账号后可同步你的任务与日报记录'}
+              </p>
+
+              <div className="mt-8 space-y-4">
+                {authMode === 'register' && (
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase tracking-widest font-bold text-stone-400 pl-1">用户名</label>
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      value={authName}
+                      onChange={(event) => setAuthName(event.target.value)}
+                      placeholder="你的称呼"
+                      className="w-full px-4 py-3 text-sm"
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-stone-400 pl-1">邮箱地址</label>
+                  <input
+                    type="email"
+                    autoComplete="email"
+                    value={authEmail}
+                    onChange={(event) => setAuthEmail(event.target.value)}
+                    placeholder="alex@example.com"
+                    className="w-full px-4 py-3 text-sm"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase tracking-widest font-bold text-stone-400 pl-1">密码</label>
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    value={authPassword}
+                    onChange={(event) => setAuthPassword(event.target.value)}
+                    placeholder="请输入密码"
+                    className="w-full px-4 py-3 text-sm"
+                  />
+                </div>
+
+                {authError && <p className="text-xs text-red-500 font-medium">{authError}</p>}
+                {authSuccess && <p className="text-xs text-green-600 font-medium">{authSuccess}</p>}
+              </div>
+
+              <button
+                type="button"
+                disabled={authSubmitting}
+                onClick={() => {
+                  void handleAuthSubmit();
+                }}
+                className="w-full mt-8 pixel-button-primary py-3 font-bold disabled:opacity-60"
+              >
+                {authSubmitting ? '处理中...' : authMode === 'login' ? '立即登录' : '立即注册'}
+              </button>
+
+              <p className="mt-5 text-center text-xs text-stone-400 font-medium">
+                {authMode === 'login' ? (
+                  <>
+                    还没有账号？
+                    <button
+                      type="button"
+                      className="ml-1 border-0 bg-transparent p-0 text-primary-accent font-bold shadow-none hover:underline"
+                      onClick={() => {
+                        setAuthMode('register');
+                        setAuthError('');
+                        setAuthSuccess('');
+                      }}
+                    >
+                      立即注册
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    已有账号？
+                    <button
+                      type="button"
+                      className="ml-1 border-0 bg-transparent p-0 text-primary-accent font-bold shadow-none hover:underline"
+                      onClick={() => {
+                        setAuthMode('login');
+                        setAuthError('');
+                        setAuthSuccess('');
+                      }}
+                    >
+                      返回登录
+                    </button>
+                  </>
+                )}
+              </p>
+            </motion.aside>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

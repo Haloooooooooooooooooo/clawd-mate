@@ -570,6 +570,18 @@ export function DynamicIsland({
           >
             ✕
           </button>
+          <button
+            type="button"
+            data-no-drag="true"
+            onClick={(event) => {
+              event.stopPropagation();
+              void handleGoHome();
+            }}
+            className="absolute bottom-2 right-3 z-20 rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[10px] font-medium text-white/85 opacity-0 transition-all hover:bg-white/15 group-hover:opacity-100 group-focus-within:opacity-100"
+            aria-label="Back to homepage"
+          >
+            回到主页
+          </button>
           <div className="flex items-center gap-2.5">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center">
               <PetSprite status={currentPetStatus} size="sm" scaleMultiplier={currentPetScaleMultiplier} />

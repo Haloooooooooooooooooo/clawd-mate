@@ -319,3 +319,47 @@ npm run dev
 ```
 
 因为那只是纯前端页面，不足以验证灵动岛窗口和桌面生图链路。
+
+---
+
+## 执行计划（网页端 + 灵动岛分离上线）
+
+说明：
+- 执行规则：每完成一个任务，把前面的 `⬜` 改成 `✅`。
+- 建议顺序：严格按阶段推进，避免“网页未独立可用”时提前发布灵动岛。
+
+### 阶段 A：网页端先独立可用（Vercel）
+
+- ⬜ A1. 移除网页端对本地桥接 `127.0.0.1:43141` 的硬依赖（轮询/推送/显隐接口改为 no-op 或 Supabase 路径）
+  - 相关文件：`web/src/lib/islandBridge.ts`、`web/src/store/useStore.ts`、`web/src/App.tsx`
+- ⬜ A2. 将日报生图从 Tauri `invoke` 切换为云端函数调用（Supabase Edge Function 或 Vercel Function）
+  - 相关文件：`web/src/pages/DailyReportView.tsx`
+- ⬜ A3. 保留并验证日报生成限制逻辑（登录校验、今日有记录、每日最多 2 次）
+  - 相关文件：`web/src/lib/dailyReportGeneration.ts`、`web/src/store/useStore.ts`
+- ⬜ A4. 配置网页端生产环境变量并完成本地构建自测
+  - 必要变量：`VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY`、`VITE_DESKTOP_DOWNLOAD_URL`
+- ⬜ A5. 部署 `web` 到 Vercel（Root Directory=`web`），并完成线上回归
+  - 验收点：任务/历史/日报生成可在纯浏览器环境使用
+
+### 阶段 B：灵动岛客户端裁剪为“可选下载”
+
+- ⬜ B1. Tauri 仅保留灵动岛窗口与必要渲染逻辑，删除 Dashboard/桥接服务等非必要能力
+  - 相关文件：`src-tauri/src/lib.rs`、`src/App.tsx`、`src/lib/islandBridge.ts`
+- ⬜ B2. 灵动岛接入 Supabase Realtime，同步任务状态（不再依赖本地 HTTP 桥接）
+- ⬜ B3. 增加“打开网页版”入口（跳转到 Vercel 的 `/app/dashboard`）
+- ⬜ B4. 完成 Windows 打包产物（`.exe`/`.msi`）并做冷启动验证
+
+### 阶段 C：发布与闭环验收
+
+- ⬜ C1. 上传灵动岛安装包到发布渠道（建议 GitHub Releases）
+- ⬜ C2. 将官网“下载灵动岛”按钮地址切到正式下载链接
+  - 相关文件：`web/src/pages/LandingPage.tsx`（读取 `VITE_DESKTOP_DOWNLOAD_URL`）
+- ⬜ C3. 双端联调验收
+  - 场景 1：仅网页使用（不下载客户端）可完成全部网页功能
+  - 场景 2：下载灵动岛后，关闭网页仍可看到灵动岛悬浮
+  - 场景 3：网页新增/完成任务后，灵动岛可实时更新
+- ⬜ C4. 更新发布说明文档（安装、已知限制、问题排查）
+
+### 当前进行中
+
+- ⬜ 当前任务：A1. 移除网页端对本地桥接硬依赖
