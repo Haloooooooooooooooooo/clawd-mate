@@ -16,6 +16,8 @@ import LandingPage from './pages/LandingPage';
 
 export default function App() {
   const applyBridgeTask = useStore((state) => state.applyBridgeTask);
+  const isLoggedIn = useStore((state) => state.isLoggedIn);
+  const tasks = useStore((state) => state.tasks);
   const toast = useStore((state) => state.toast);
   const clearToast = useStore((state) => state.clearToast);
 
@@ -41,6 +43,27 @@ export default function App() {
       window.clearInterval(timer);
     };
   }, [applyBridgeTask]);
+
+  useEffect(() => {
+    const hasRunningTasks = tasks.some((task) => task.status === 'running' || task.status === 'paused');
+    if (!isLoggedIn || !hasRunningTasks) {
+      return;
+    }
+
+    const beforeUnloadHandler = (event: BeforeUnloadEvent) => {
+      const state = useStore.getState();
+      const hasActive = state.tasks.some((task) => task.status === 'running' || task.status === 'paused');
+      if (!state.isLoggedIn || !hasActive) return;
+
+      event.preventDefault();
+      event.returnValue = '你有进行中的任务，离开将结束并按取消记录。';
+    };
+
+    window.addEventListener('beforeunload', beforeUnloadHandler);
+    return () => {
+      window.removeEventListener('beforeunload', beforeUnloadHandler);
+    };
+  }, [isLoggedIn, tasks]);
 
   useEffect(() => {
     if (!toast) return;

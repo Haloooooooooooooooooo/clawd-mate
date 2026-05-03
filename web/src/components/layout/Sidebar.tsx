@@ -45,6 +45,35 @@ export default function Sidebar() {
     typeof window !== 'undefined' &&
     Boolean((window as unknown as { __TAURI__?: unknown }).__TAURI__);
 
+  const resolveGuestImportChoice = () => {
+    const state = useStore.getState();
+    if (state.isLoggedIn) {
+      return {
+        importGuestData: false,
+        guestHistoryToImport: [] as typeof state.history,
+        guestDailyReportImagesToImport: {} as typeof state.dailyReportImagesByDate
+      };
+    }
+    const hasGuestHistory = state.history.some((record) => record.tasks.length > 0);
+    const hasGuestImages = Object.values(state.dailyReportImagesByDate).some((list) => list.length > 0);
+    if (!hasGuestHistory && !hasGuestImages) {
+      return {
+        importGuestData: false,
+        guestHistoryToImport: [] as typeof state.history,
+        guestDailyReportImagesToImport: {} as typeof state.dailyReportImagesByDate
+      };
+    }
+
+    const keep = window.confirm(
+      '检测到游客模式历史记录（含日报图片）。是否保留并同步到当前账号？\n\n确定：保留并上传\n取消：不保留并清除'
+    );
+    return {
+      importGuestData: keep,
+      guestHistoryToImport: keep ? state.history : [],
+      guestDailyReportImagesToImport: keep ? state.dailyReportImagesByDate : {}
+    };
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -77,18 +106,22 @@ export default function Sidebar() {
       const { data, error } = await supabase.auth.getSession();
       if (!mounted) return;
       if (error || !data.session?.user) {
-        const shouldClear = useStore.getState().isLoggedIn;
-        setLoggedIn(false, null, { clearDataOnLogout: shouldClear });
+        // Keep local task/bridge state when there is no cloud session.
+        // Explicit logout button handles destructive clearing.
+        setLoggedIn(false, null, { clearDataOnLogout: false });
         return;
       }
       try {
         const uiUser = await getUserWithProfile(data.session.user);
         await upsertUserProfile(data.session.user, uiUser.name);
-        const previousState = useStore.getState();
-        const guestHistoryToImport = previousState.isLoggedIn ? [] : previousState.history;
+        const guestChoice = resolveGuestImportChoice();
         setLoggedIn(true, uiUser);
         if (uiUser.id) {
-          await hydrateCloudData(uiUser.id, { guestHistoryToImport });
+          await hydrateCloudData(uiUser.id, {
+            guestHistoryToImport: guestChoice.guestHistoryToImport,
+            guestDailyReportImagesToImport: guestChoice.guestDailyReportImagesToImport,
+            importGuestData: guestChoice.importGuestData
+          });
         }
       } catch (syncError) {
         console.error('[auth bootstrap] failed to hydrate cloud data', syncError);
@@ -99,20 +132,22 @@ export default function Sidebar() {
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session?.user) {
-        void syncCloudData();
-        const shouldClear = useStore.getState().isLoggedIn;
-        setLoggedIn(false, null, { clearDataOnLogout: shouldClear });
+        // Avoid clearing bridge-synced local tasks on transient/no-session events.
+        setLoggedIn(false, null, { clearDataOnLogout: false });
         return;
       }
       void (async () => {
         try {
           const uiUser = await getUserWithProfile(session.user);
           await upsertUserProfile(session.user, uiUser.name);
-          const previousState = useStore.getState();
-          const guestHistoryToImport = previousState.isLoggedIn ? [] : previousState.history;
+          const guestChoice = resolveGuestImportChoice();
           setLoggedIn(true, uiUser);
           if (uiUser.id) {
-            await hydrateCloudData(uiUser.id, { guestHistoryToImport });
+            await hydrateCloudData(uiUser.id, {
+              guestHistoryToImport: guestChoice.guestHistoryToImport,
+              guestDailyReportImagesToImport: guestChoice.guestDailyReportImagesToImport,
+              importGuestData: guestChoice.importGuestData
+            });
           }
         } catch (syncError) {
           console.error('[auth state] failed to hydrate cloud data', syncError);
@@ -204,8 +239,9 @@ export default function Sidebar() {
     try {
       if (authMode === 'register') {
         const displayName = authName.trim();
+        const registerEmail = authEmail.trim();
         const { data, error } = await supabase.auth.signUp({
-          email: authEmail.trim(),
+          email: registerEmail,
           password: authPassword,
           options: {
             data: {
@@ -218,13 +254,14 @@ export default function Sidebar() {
           await upsertUserProfile(data.user || data.session!.user, displayName);
           await supabase.auth.signOut();
           setLoggedIn(false, null, { clearDataOnLogout: true });
-          setAuthSuccess('注册成功，请直接登录');
-          setAuthMode('login');
-          setAuthName('');
-          setAuthEmail('');
-          setAuthPassword('');
-          return;
         }
+        setAuthMode('login');
+        setAuthName('');
+        setAuthEmail(registerEmail);
+        setAuthPassword('');
+        setAuthSuccess('注册成功，请登录');
+        setAuthError('');
+        return;
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email: authEmail.trim(),
@@ -366,8 +403,6 @@ export default function Sidebar() {
                         onClick={() => {
                           void (async () => {
                             setShowLogout(false);
-                            setLoggedIn(false, null, { clearDataOnLogout: true });
-                            showToast('已退出登录');
                             try {
                               await syncCloudData();
                             } catch (error) {
@@ -378,6 +413,8 @@ export default function Sidebar() {
                             } catch (error) {
                               console.warn('[logout] sign out request failed', error);
                             }
+                            setLoggedIn(false, null, { clearDataOnLogout: true });
+                            showToast('已退出登录');
                           })();
                         }}
                         className="flex w-full items-center gap-2 px-3 py-2 text-[13px] font-semibold text-red-500 shadow-none hover:bg-red-50"

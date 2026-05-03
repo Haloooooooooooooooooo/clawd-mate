@@ -49,14 +49,25 @@ export async function loadCloudSnapshot(
 
   if (historyError) throw historyError;
 
-  const { data: dailyReportRows, error: dailyReportError } = await supabase
-    .from('daily_report_images')
-    .select('id,report_date,image_data_url,prompt_payload,debug_logs,created_at')
-    .eq('user_id', userId)
-    .order('report_date', { ascending: false })
-    .order('created_at', { ascending: true });
+  let dailyReportRows: DbDailyReportImageRow[] | null = [];
+  {
+    const response = await supabase
+      .from('daily_report_images')
+      .select('id,report_date,image_data_url,prompt_payload,debug_logs,created_at')
+      .eq('user_id', userId)
+      .order('report_date', { ascending: false })
+      .order('created_at', { ascending: true });
 
-  if (dailyReportError) throw dailyReportError;
+    if (response.error) {
+      if (!isMissingRelationError(response.error, 'daily_report_images')) {
+        throw response.error;
+      }
+      console.warn('[cloud] daily_report_images missing, skip image hydration');
+      dailyReportRows = [];
+    } else {
+      dailyReportRows = (response.data as DbDailyReportImageRow[] | null) || [];
+    }
+  }
 
   const historyTasks: Task[] = ((historyRows as DbHistoryRow[] | null) || []).map((row) => {
     const createdAt = new Date(row.created_at).getTime();
@@ -76,7 +87,7 @@ export async function loadCloudSnapshot(
     };
   });
 
-  const dailyReportImages = ((dailyReportRows as DbDailyReportImageRow[] | null) || []).reduce(
+  const dailyReportImages = (dailyReportRows || []).reduce(
     (acc, row) => {
       const list = acc[row.report_date] || [];
       list.push({
@@ -104,6 +115,49 @@ type SaveCloudOptions = {
   historyOnly?: boolean;
 };
 
+function isMissingRelationError(error: unknown, relation: string): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const maybe = error as { code?: string; message?: string };
+  if (maybe.code !== 'PGRST205') return false;
+  return (maybe.message || '').toLowerCase().includes(relation.toLowerCase());
+}
+
+function normalizeSubtasksForKey(subtasks: Subtask[] | undefined): string {
+  if (!Array.isArray(subtasks)) return '[]';
+  return JSON.stringify(
+    subtasks.map((subtask) => ({
+      title: subtask.title ?? '',
+      status: subtask.status ?? 'pending'
+    }))
+  );
+}
+
+function buildHistoryKey(input: {
+  title: string;
+  status: 'done' | 'cancelled';
+  totalDurationSeconds: number;
+  actualDurationSeconds: number;
+  createdAtIso: string;
+  subtasks?: Subtask[];
+}): string {
+  return [
+    input.title,
+    input.status,
+    String(input.totalDurationSeconds),
+    String(input.actualDurationSeconds),
+    input.createdAtIso,
+    normalizeSubtasksForKey(input.subtasks)
+  ].join('|');
+}
+
+function buildDailyReportKey(input: {
+  reportDate: string;
+  imageDataUrl: string;
+  createdAtIso: string;
+}): string {
+  return [input.reportDate, input.imageDataUrl, input.createdAtIso].join('|');
+}
+
 export async function saveCloudSnapshot(
   userId: string,
   tasks: Task[],
@@ -112,21 +166,6 @@ export async function saveCloudSnapshot(
   options?: SaveCloudOptions
 ): Promise<void> {
   void tasks;
-  void options;
-
-  // Hard rule: never persist running/paused tasks to cloud.
-  // We proactively clear historical leftovers from old versions.
-  const { error: clearSubtasksError } = await supabase
-    .from('subtasks')
-    .delete()
-    .eq('user_id', userId);
-  if (clearSubtasksError) throw clearSubtasksError;
-
-  const { error: clearTasksError } = await supabase
-    .from('tasks')
-    .delete()
-    .eq('user_id', userId);
-  if (clearTasksError) throw clearTasksError;
 
   const historyItems = history.flatMap((record) =>
     record.tasks
@@ -142,28 +181,51 @@ export async function saveCloudSnapshot(
         payload: {
           subtasks: task.subtasks
         },
-        created_at: new Date(task.endTime ?? task.createdAt).toISOString()
+        created_at: new Date(task.endTime ?? task.createdAt).toISOString(),
+        _dedupe_key: buildHistoryKey({
+          title: task.title,
+          status: task.status,
+          totalDurationSeconds: Math.max(0, task.totalDuration),
+          actualDurationSeconds: getTaskActualDurationSeconds(task),
+          createdAtIso: new Date(task.endTime ?? task.createdAt).toISOString(),
+          subtasks: task.subtasks
+        })
       }))
   );
 
-  const { error: clearHistoryError } = await supabase
+  const { data: cloudHistoryRows, error: cloudHistoryError } = await supabase
     .from('task_history')
-    .delete()
+    .select('title,status,total_duration_seconds,actual_duration_seconds,payload,created_at')
     .eq('user_id', userId);
-  if (clearHistoryError) throw clearHistoryError;
+  if (cloudHistoryError) throw cloudHistoryError;
 
-  if (historyItems.length > 0) {
+  const existingHistoryKeys = new Set(
+    ((cloudHistoryRows as DbHistoryRow[] | null) || []).map((row) =>
+      buildHistoryKey({
+        title: row.title,
+        status: row.status,
+        totalDurationSeconds: Math.max(0, row.total_duration_seconds),
+        actualDurationSeconds: Math.max(0, row.actual_duration_seconds),
+        createdAtIso: new Date(row.created_at).toISOString(),
+        subtasks: Array.isArray(row.payload?.subtasks) ? row.payload?.subtasks : []
+      })
+    )
+  );
+
+  const historyItemsToInsert = historyItems
+    .filter((item) => !existingHistoryKeys.has(item._dedupe_key))
+    .map(({ _dedupe_key, ...row }) => row);
+
+  if (historyItemsToInsert.length > 0) {
     const { error: insertHistoryError } = await supabase
       .from('task_history')
-      .insert(historyItems);
+      .insert(historyItemsToInsert);
     if (insertHistoryError) throw insertHistoryError;
   }
 
-  const { error: clearDailyReportImagesError } = await supabase
-    .from('daily_report_images')
-    .delete()
-    .eq('user_id', userId);
-  if (clearDailyReportImagesError) throw clearDailyReportImagesError;
+  if (options?.historyOnly) {
+    return;
+  }
 
   const dailyReportItems = Object.entries(dailyReportImagesByDate).flatMap(([date, list]) =>
     list.slice(-2).map((item) => ({
@@ -172,14 +234,46 @@ export async function saveCloudSnapshot(
       image_data_url: item.imageDataUrl,
       prompt_payload: item.promptPayload ?? null,
       debug_logs: item.debugLogs ?? null,
-      created_at: new Date(item.createdAt).toISOString()
+      created_at: new Date(item.createdAt).toISOString(),
+      _dedupe_key: buildDailyReportKey({
+        reportDate: date,
+        imageDataUrl: item.imageDataUrl,
+        createdAtIso: new Date(item.createdAt).toISOString()
+      })
     }))
   );
 
-  if (dailyReportItems.length > 0) {
+  const dailyReportResponse = await supabase
+    .from('daily_report_images')
+    .select('report_date,image_data_url,created_at')
+    .eq('user_id', userId);
+  if (dailyReportResponse.error) {
+    if (isMissingRelationError(dailyReportResponse.error, 'daily_report_images')) {
+      console.warn('[cloud] daily_report_images missing, skip image sync');
+      return;
+    }
+    throw dailyReportResponse.error;
+  }
+  const cloudDailyReportRows = (dailyReportResponse.data as DbDailyReportImageRow[] | null) || [];
+
+  const existingDailyReportKeys = new Set(
+    cloudDailyReportRows.map((row) =>
+      buildDailyReportKey({
+        reportDate: row.report_date,
+        imageDataUrl: row.image_data_url,
+        createdAtIso: new Date(row.created_at).toISOString()
+      })
+    )
+  );
+
+  const dailyReportItemsToInsert = dailyReportItems
+    .filter((item) => !existingDailyReportKeys.has(item._dedupe_key))
+    .map(({ _dedupe_key, ...row }) => row);
+
+  if (dailyReportItemsToInsert.length > 0) {
     const { error: insertDailyReportImagesError } = await supabase
       .from('daily_report_images')
-      .insert(dailyReportItems);
+      .insert(dailyReportItemsToInsert);
     if (insertDailyReportImagesError) throw insertDailyReportImagesError;
   }
 }

@@ -4,8 +4,6 @@ import App from './App.tsx';
 import './index.css';
 
 const GUEST_PERSIST_KEY = 'clawdmate-storage-prod';
-const LAST_UNLOAD_AT_KEY = 'clawdmate-guest-last-unload-at';
-const SAME_SESSION_REOPEN_MS = 4000;
 
 function getPersistedLoggedInFlag(): boolean {
   try {
@@ -23,15 +21,14 @@ function shouldClearGuestSnapshotOnBoot(): boolean {
   if (nav?.type === 'reload' || nav?.type === 'back_forward') {
     return false;
   }
-  const lastUnloadRaw = localStorage.getItem(LAST_UNLOAD_AT_KEY);
-  if (!lastUnloadRaw) return false;
-  const lastUnloadAt = Number(lastUnloadRaw);
-  if (!Number.isFinite(lastUnloadAt)) return false;
-  return Date.now() - lastUnloadAt > SAME_SESSION_REOPEN_MS;
+  return true;
 }
 
 function clearPersistedHistoryOnBoot() {
   try {
+    if (getPersistedLoggedInFlag()) {
+      return;
+    }
     const raw = localStorage.getItem(GUEST_PERSIST_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw) as { state?: Record<string, unknown> };
@@ -52,10 +49,6 @@ if (!getPersistedLoggedInFlag() && shouldClearGuestSnapshotOnBoot()) {
 }
 
 clearPersistedHistoryOnBoot();
-
-window.addEventListener('pagehide', () => {
-  localStorage.setItem(LAST_UNLOAD_AT_KEY, String(Date.now()));
-});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

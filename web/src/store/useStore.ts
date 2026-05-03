@@ -190,7 +190,14 @@ interface AppState {
   incrementDailyReportGenerationCount: (date: string, userId?: string | null) => void;
   getDailyReportImages: (date: string) => DailyReportImage[];
   addDailyReportImage: (date: string, image: Omit<DailyReportImage, 'date'>) => void;
-  hydrateCloudData: (userId: string, options?: { guestHistoryToImport?: DailyRecord[] }) => Promise<void>;
+  hydrateCloudData: (
+    userId: string,
+    options?: {
+      guestHistoryToImport?: DailyRecord[];
+      guestDailyReportImagesToImport?: Record<string, DailyReportImage[]>;
+      importGuestData?: boolean;
+    }
+  ) => Promise<void>;
   syncCloudData: (options?: { historyOnly?: boolean }) => Promise<void>;
   toggleIsland: () => void;
   setIslandVisible: (visible: boolean) => void;
@@ -324,6 +331,11 @@ export const useStore = create<AppState>()(
           : [];
 
         if (!canApplyTaskUpdate) {
+          console.log('[web-sync] ignore-older-packet', {
+            syncId,
+            incomingUpdatedAt,
+            lastTaskSyncAt
+          });
           const nextState = {
             ...state,
             lastBridgeSyncAt: now
@@ -346,6 +358,13 @@ export const useStore = create<AppState>()(
           now < statusLock.until;
 
         if (!existingTask) {
+          console.log('[web-sync] create-incoming-task', {
+            syncId,
+            title,
+            mappedStatus,
+            canApplyFocus,
+            activeTaskId: state.activeTaskId
+          });
           if (isTerminal) {
             const nextState = {
               ...state,
@@ -394,9 +413,19 @@ export const useStore = create<AppState>()(
             })),
             createdAt: Date.now()
           };
+          const hasFocusedTask =
+            !!state.activeTaskId &&
+            state.tasks.some(
+              (task) =>
+                task.id === state.activeTaskId && (task.status === 'running' || task.status === 'paused')
+            );
           const nextState = {
             tasks: [...state.tasks, createdTask],
-            activeTaskId: canApplyFocus ? createdTask.id : (state.activeTaskId || createdTask.id),
+            activeTaskId: canApplyFocus
+              ? createdTask.id
+              : hasFocusedTask
+                ? state.activeTaskId
+                : (state.activeTaskId || createdTask.id),
             lastBridgeSyncAt: now,
             localStatusLockBySyncId: activeStatusLocks,
             lastTaskSyncAtById: {
@@ -412,6 +441,11 @@ export const useStore = create<AppState>()(
         }
 
         if (isTerminal) {
+          console.log('[web-sync] finalize-incoming-task', {
+            syncId,
+            mappedStatus,
+            existingTaskId: existingTask.id
+          });
           const guestMutationAt = !state.isLoggedIn ? Date.now() : state.lastGuestHistoryMutationAt;
           const finalizedTask: Task = {
             ...existingTask,
@@ -500,6 +534,12 @@ export const useStore = create<AppState>()(
           },
           lastFocusSyncAt: canApplyFocus ? incomingUpdatedAt : state.lastFocusSyncAt
         };
+        console.log('[web-sync] update-incoming-task', {
+          syncId,
+          mappedStatus,
+          canApplyFocus,
+          existingTaskId: existingTask.id
+        });
         if (state.isLoggedIn && state.user?.id) {
           queueCloudSync();
         }
@@ -900,27 +940,58 @@ export const useStore = create<AppState>()(
 
       hydrateCloudData: async (userId, options) => {
         const guestHistory = options?.guestHistoryToImport || [];
+        const guestDailyReportImages = options?.guestDailyReportImagesToImport || {};
+        const importGuestData = options?.importGuestData === true;
         const guestMutationAt = get().lastGuestHistoryMutationAt;
         const guestImportedAt = get().lastGuestHistoryImportedAt;
         const shouldImportGuestHistory =
-          guestHistory.length > 0 && guestMutationAt > 0 && guestMutationAt > guestImportedAt;
+          importGuestData && guestHistory.length > 0 && guestMutationAt > 0 && guestMutationAt > guestImportedAt;
+        const shouldImportGuestImages =
+          importGuestData &&
+          Object.values(guestDailyReportImages).some((list) => Array.isArray(list) && list.length > 0);
         const snapshot = await loadCloudSnapshot(userId);
         let mergedHistory = snapshot.history || [];
+        let mergedDailyReportImages = snapshot.dailyReportImages || {};
         let nextGuestHistoryImportedAt = guestImportedAt;
 
-        if (shouldImportGuestHistory) {
-          const cloudHasHistory = mergedHistory.length > 0;
-          if (!cloudHasHistory) {
-            // Only seed cloud history when cloud is empty, to avoid overwriting existing records.
-            await saveCloudSnapshot(userId, [], guestHistory, get().dailyReportImagesByDate, { historyOnly: true });
-            const refreshed = await loadCloudSnapshot(userId);
-            mergedHistory = refreshed.history || [];
-            nextGuestHistoryImportedAt = guestMutationAt;
-          } else {
-            // Cloud already has data; keep cloud as source of truth and avoid destructive overwrite.
-            mergedHistory = snapshot.history || [];
-            nextGuestHistoryImportedAt = guestMutationAt;
-          }
+        if (shouldImportGuestHistory || shouldImportGuestImages) {
+          const mergedByDate = new Map<string, Task[]>();
+          [...(snapshot.history || []), ...guestHistory].forEach((record) => {
+            const current = mergedByDate.get(record.date) || [];
+            mergedByDate.set(record.date, [...current, ...record.tasks]);
+          });
+          mergedHistory = Array.from(mergedByDate.entries())
+            .map(([date, tasks]) => ({
+              date,
+              tasks: tasks
+                .filter((task) => task.status === 'done' || task.status === 'cancelled')
+                .sort((a, b) => (a.endTime ?? a.createdAt) - (b.endTime ?? b.createdAt))
+            }))
+            .filter((record) => record.tasks.length > 0)
+            .sort((a, b) => (a.date > b.date ? -1 : 1));
+
+          const imageDates = new Set([
+            ...Object.keys(snapshot.dailyReportImages || {}),
+            ...Object.keys(guestDailyReportImages || {})
+          ]);
+          const mergedImagesByDate: Record<string, DailyReportImage[]> = {};
+          imageDates.forEach((date) => {
+            const fromCloud = snapshot.dailyReportImages?.[date] || [];
+            const fromGuest = guestDailyReportImages?.[date] || [];
+            const mergedList = [...fromCloud, ...fromGuest]
+              .sort((a, b) => a.createdAt - b.createdAt)
+              .slice(-2);
+            if (mergedList.length > 0) {
+              mergedImagesByDate[date] = mergedList;
+            }
+          });
+          mergedDailyReportImages = mergedImagesByDate;
+
+          await saveCloudSnapshot(userId, [], mergedHistory, mergedDailyReportImages, { historyOnly: true });
+          const refreshed = await loadCloudSnapshot(userId);
+          mergedHistory = refreshed.history || [];
+          mergedDailyReportImages = refreshed.dailyReportImages || {};
+          nextGuestHistoryImportedAt = guestMutationAt;
         }
 
         set((state) => ({
@@ -928,7 +999,7 @@ export const useStore = create<AppState>()(
           tasks: snapshot.tasks || [],
           history: mergedHistory,
           lastGuestHistoryImportedAt: nextGuestHistoryImportedAt,
-          dailyReportImagesByDate: snapshot.dailyReportImages || {},
+          dailyReportImagesByDate: mergedDailyReportImages,
           activeTaskId: null,
           closedSyncIds: {},
           lastTaskSyncAtById: {},

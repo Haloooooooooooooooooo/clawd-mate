@@ -79,6 +79,9 @@ function App() {
 
     const syncTasks = async () => {
       const incoming = await pullTasksForIsland();
+      if (incoming.length > 0) {
+        console.log('[island-sync] pulled', incoming.length, 'tasks');
+      }
       if (cancelled || incoming.length === 0) return;
 
       incoming.forEach((item) => {
@@ -127,6 +130,12 @@ function App() {
         const subtaskPayloads = normalizeBridgeSubtasks(rawSubtaskPayloads, status);
 
         if (!title || !Number.isFinite(plannedDuration) || plannedDuration <= 0) {
+          console.log('[island-sync] skip-invalid-payload', {
+            syncId,
+            title,
+            plannedDuration,
+            status: item.status
+          });
           return;
         }
 
@@ -136,6 +145,12 @@ function App() {
           : undefined;
 
         if (existingTask) {
+          console.log('[island-sync] update-existing-task', {
+            syncId,
+            existingTaskId: existingTask.id,
+            status,
+            focused
+          });
           if (status === 'cancelled' || status === 'completed') {
             if (status === 'completed') {
               triggerCelebration();
@@ -178,10 +193,12 @@ function App() {
             }))
           });
 
-          const hasCurrentActive = storeState.tasks.some(
-            (task) => task.id === storeState.activeTaskId && task.status === 'active'
+          const hasCurrentFocusedTask = storeState.tasks.some(
+            (task) =>
+              task.id === storeState.activeTaskId &&
+              (task.status === 'active' || task.status === 'paused')
           );
-          if (status === 'active' && !hasCurrentActive) {
+          if (status === 'active' && !hasCurrentFocusedTask) {
             setActiveTask(existingTask.id);
           }
           if (focused && incomingUpdatedAt >= lastFocusSyncAtRef.current) {
@@ -195,6 +212,7 @@ function App() {
         }
 
         if (status === 'cancelled' || status === 'completed') {
+          console.log('[island-sync] skip-create-terminal-task', { syncId, status });
           if (syncId) {
             lastTaskSyncAtRef.current[syncId] = incomingUpdatedAt;
           }
@@ -202,11 +220,13 @@ function App() {
         }
 
         const taskId = uuidv4();
-        const hasCurrentActive = storeState.tasks.some(
-          (task) => task.id === storeState.activeTaskId && task.status === 'active'
+        const hasCurrentFocusedTask = storeState.tasks.some(
+          (task) =>
+            task.id === storeState.activeTaskId &&
+            (task.status === 'active' || task.status === 'paused')
         );
         const canApplyFocus = focused && incomingUpdatedAt >= lastFocusSyncAtRef.current;
-        const shouldSetAsMain = canApplyFocus || (status === 'active' && !hasCurrentActive);
+        const shouldSetAsMain = canApplyFocus || (status === 'active' && !hasCurrentFocusedTask);
 
         addTask({
           id: taskId,
@@ -240,6 +260,13 @@ function App() {
         if (syncId) {
           lastTaskSyncAtRef.current[syncId] = incomingUpdatedAt;
         }
+        console.log('[island-sync] create-new-task', {
+          syncId,
+          taskId,
+          status,
+          focused,
+          shouldSetAsMain
+        });
       });
     };
 

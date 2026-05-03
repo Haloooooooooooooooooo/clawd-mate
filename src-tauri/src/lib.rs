@@ -321,12 +321,30 @@ fn handle_bridge_request(stream: TcpStream, app: &AppHandle, state: &BridgeState
             match envelope.source.as_str() {
                 "web" => {
                     if let Ok(mut q) = state.web_to_island_tasks.lock() {
+                        println!(
+                            "[bridge] enqueue web->island sync_id={:?} title={} status={:?} updated_at_ms={:?} size_before={}",
+                            envelope.task.sync_id,
+                            envelope.task.title,
+                            envelope.task.status,
+                            envelope.task.updated_at_ms,
+                            q.len()
+                        );
                         q.push(envelope.task);
+                        println!("[bridge] queue web->island size_after={}", q.len());
                     }
                 }
                 "island" => {
                     if let Ok(mut q) = state.island_to_web_tasks.lock() {
+                        println!(
+                            "[bridge] enqueue island->web sync_id={:?} title={} status={:?} updated_at_ms={:?} size_before={}",
+                            envelope.task.sync_id,
+                            envelope.task.title,
+                            envelope.task.status,
+                            envelope.task.updated_at_ms,
+                            q.len()
+                        );
                         q.push(envelope.task);
+                        println!("[bridge] queue island->web size_after={}", q.len());
                     }
                 }
                 _ => {
@@ -355,13 +373,27 @@ fn handle_bridge_request(stream: TcpStream, app: &AppHandle, state: &BridgeState
 
             let tasks = if target == "web" {
                 if let Ok(mut q) = state.island_to_web_tasks.lock() {
-                    q.drain(..).collect::<Vec<_>>()
+                    let before = q.len();
+                    let drained = q.drain(..).collect::<Vec<_>>();
+                    println!(
+                        "[bridge] pull target=web drained={} remaining={}",
+                        drained.len(),
+                        before.saturating_sub(drained.len())
+                    );
+                    drained
                 } else {
                     Vec::new()
                 }
             } else if target == "island" {
                 if let Ok(mut q) = state.web_to_island_tasks.lock() {
-                    q.drain(..).collect::<Vec<_>>()
+                    let before = q.len();
+                    let drained = q.drain(..).collect::<Vec<_>>();
+                    println!(
+                        "[bridge] pull target=island drained={} remaining={}",
+                        drained.len(),
+                        before.saturating_sub(drained.len())
+                    );
+                    drained
                 } else {
                     Vec::new()
                 }
@@ -427,13 +459,11 @@ fn handle_bridge_request(stream: TcpStream, app: &AppHandle, state: &BridgeState
     }
 }
 
-fn start_bridge_server(app: AppHandle, state: BridgeState) {
-    thread::spawn(move || {
-        let listener = match TcpListener::bind("127.0.0.1:43141") {
-            Ok(listener) => listener,
-            Err(_) => return,
-        };
+fn start_bridge_server(app: AppHandle, state: BridgeState) -> Result<(), String> {
+    let listener = TcpListener::bind("127.0.0.1:43141")
+        .map_err(|error| format!("bridge_bind_failed: {}", error))?;
 
+    thread::spawn(move || {
         for incoming in listener.incoming() {
             let Ok(stream) = incoming else {
                 continue;
@@ -441,6 +471,8 @@ fn start_bridge_server(app: AppHandle, state: BridgeState) {
             handle_bridge_request(stream, &app, &state);
         }
     });
+
+    Ok(())
 }
 
 fn load_env_files() {
@@ -701,7 +733,8 @@ pub fn run() {
 
             window.show()?;
             bridge_state.island_visible.store(true, Ordering::Relaxed);
-            start_bridge_server(app.handle().clone(), bridge_state);
+            start_bridge_server(app.handle().clone(), bridge_state)
+                .map_err(|error| tauri::Error::AssetNotFound(error))?;
 
             let _ = ensure_dashboard_window(&app.handle())?;
 
