@@ -9,13 +9,18 @@ import { LogOut, Plus } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { useStore } from '../../store/useStore';
-import { getIslandState, isLocalBridgeEnabled } from '../../lib/islandBridge';
+import { getIslandState, isLocalBridgeEnabled, setIslandVisibility as setIslandVisibilityRemote } from '../../lib/islandBridge';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { getUserWithProfile, upsertUserProfile } from '../../lib/profileRepository';
 
 export default function Sidebar() {
+  const DESKTOP_INSTALLED_KEY = 'clawdmate-desktop-installed';
   const [showLogout, setShowLogout] = useState(false);
   const [showIslandDownloadModal, setShowIslandDownloadModal] = useState(false);
+  const [hasDesktopInstalled, setHasDesktopInstalled] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(DESKTOP_INSTALLED_KEY) === '1';
+  });
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authName, setAuthName] = useState('');
   const [authEmail, setAuthEmail] = useState('');
@@ -81,6 +86,10 @@ export default function Sidebar() {
     const syncState = async () => {
       const visible = await getIslandState();
       if (cancelled || visible === null) return;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(DESKTOP_INSTALLED_KEY, '1');
+      }
+      setHasDesktopInstalled(true);
       setIslandVisible(visible);
     };
 
@@ -293,19 +302,33 @@ export default function Sidebar() {
       return;
     }
 
-    // Browser mode: if local bridge is reachable, control island directly without showing download modal.
+    // Browser mode: try bridge control directly first.
     if (isLocalBridgeEnabled) {
-      const bridgeState = await getIslandState();
-      if (bridgeState !== null) {
-        toggleIsland();
+      const remoteResult = await setIslandVisibilityRemote(!isIslandVisible);
+      if (typeof remoteResult === 'boolean') {
+        setIslandVisible(remoteResult);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(DESKTOP_INSTALLED_KEY, '1');
+        }
+        setHasDesktopInstalled(true);
         return;
       }
+    }
+
+    // If user already downloaded desktop app, don't show download modal repeatedly.
+    if (hasDesktopInstalled) {
+      showToast('未检测到正在运行的灵动岛，请先启动桌面端应用');
+      return;
     }
 
     setShowIslandDownloadModal(true);
   };
 
   const openDesktopDownload = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(DESKTOP_INSTALLED_KEY, '1');
+    }
+    setHasDesktopInstalled(true);
     const win = window.open(normalizedDesktopDownloadUrl, '_blank', 'noopener,noreferrer');
     if (!win) {
       window.location.href = normalizedDesktopDownloadUrl;
