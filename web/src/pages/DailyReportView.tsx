@@ -314,6 +314,14 @@ export default function DailyReportView() {
       return { started: false };
     }
 
+    // Fast-path guard: if today's report already has 2 images, block immediately.
+    if (isLoggedIn && selectedDate === generationDateKey && generatedImageUrls.length >= 2) {
+      const message = '今天最多生成 2 张日报图片，明天再来吧。';
+      setGenerateError(message);
+      showToast(message);
+      return { started: false, blockedReason: 'limit_reached' };
+    }
+
     const eligibility = getDailyReportEligibility({
       record: selectedRecord,
       isLoggedIn,

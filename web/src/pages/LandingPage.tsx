@@ -127,15 +127,6 @@ const LandingPage: React.FC = () => {
             <img src="/clawd.png" alt="Clawd" className="w-14 h-14 pixel-icon" style={{ imageRendering: 'pixelated' }} />
             <img src="/clawdmate.png" alt="ClawdMate" className="h-28 pixel-icon -ml-4 translate-y-2" style={{ imageRendering: 'pixelated' }} />
           </div>
-
-          <div className="hidden md:flex items-center gap-10 text-lg">
-            <div className="relative group cursor-pointer font-bold">
-              <span className="text-primary">首页</span>
-              <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-[3px] bg-primary/60 rounded-full" />
-            </div>
-            <a href="#" className="text-text-dark font-medium hover:text-primary transition-colors">功能</a>
-            <a href="#" className="text-text-dark font-medium hover:text-primary transition-colors">关于我们</a>
-          </div>
         </div>
 
         <div className="flex items-center gap-4">
