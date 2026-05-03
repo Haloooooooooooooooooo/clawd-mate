@@ -287,12 +287,22 @@ export default function Sidebar() {
     }
   };
 
-  const handleToggleIslandClick = () => {
-    if (!isDesktopRuntime) {
-      setShowIslandDownloadModal(true);
+  const handleToggleIslandClick = async () => {
+    if (isDesktopRuntime) {
+      toggleIsland();
       return;
     }
-    toggleIsland();
+
+    // Browser mode: if local bridge is reachable, control island directly without showing download modal.
+    if (isLocalBridgeEnabled) {
+      const bridgeState = await getIslandState();
+      if (bridgeState !== null) {
+        toggleIsland();
+        return;
+      }
+    }
+
+    setShowIslandDownloadModal(true);
   };
 
   const openDesktopDownload = () => {
@@ -362,14 +372,16 @@ export default function Sidebar() {
           </Link>
 
           <button
-            onClick={handleToggleIslandClick}
+            onClick={() => {
+              void handleToggleIslandClick();
+            }}
             className={cn(
               'flex min-h-[62px] w-full items-center justify-center gap-3 px-5 py-4 text-[16px] font-semibold tracking-[0.03em] pixel-button-primary',
               isIslandVisible ? 'opacity-95' : ''
             )}
           >
             <span className="h-3 w-3 shrink-0 rounded-full border-2 border-white/80" />
-            <span>{isIslandVisible ? '关闭灵动岛' : '召唤灵动岛'}</span>
+            <span>{isIslandVisible ? '关闭灵动岛' : '开启灵动岛'}</span>
           </button>
 
           <div className="relative mt-4">
@@ -458,7 +470,7 @@ export default function Sidebar() {
             >
               <h3 className="text-xl font-display font-bold text-ink">先下载灵动岛桌面版</h3>
               <p className="mt-2 text-sm text-muted-text">
-                网页端无法直接召唤系统级灵动岛。请先下载安装桌面版，再使用“召唤灵动岛”功能。
+                网页端无法直接开启系统级灵动岛。请先下载安装桌面版，再使用“开启灵动岛”功能。
               </p>
               <div className="mt-5 flex justify-end gap-2">
                 <button
@@ -541,7 +553,7 @@ export default function Sidebar() {
                   <input
                     type="password"
                     name={authMode === 'login' ? 'clawdmate_login_password' : 'clawdmate_register_password'}
-                    autoComplete="new-password"
+                    autoComplete="off"
                     value={authPassword}
                     onChange={(event) => setAuthPassword(event.target.value)}
                     placeholder="请输入密码"

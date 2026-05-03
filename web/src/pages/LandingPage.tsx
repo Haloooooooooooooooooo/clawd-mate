@@ -312,7 +312,7 @@ const LandingPage: React.FC = () => {
                   <label className="text-[10px] uppercase tracking-widest font-bold text-stone-400 pl-1">邮箱地址</label>
                   <input
                     type="email"
-                    autoComplete="email"
+                    autoComplete="off"
                     value={authEmail}
                     onChange={(event) => setAuthEmail(event.target.value)}
                     placeholder="alex@example.com"
@@ -324,7 +324,7 @@ const LandingPage: React.FC = () => {
                   <label className="text-[10px] uppercase tracking-widest font-bold text-stone-400 pl-1">密码</label>
                   <input
                     type="password"
-                    autoComplete="current-password"
+                    autoComplete="off"
                     value={authPassword}
                     onChange={(event) => setAuthPassword(event.target.value)}
                     placeholder="请输入密码"
