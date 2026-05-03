@@ -142,10 +142,16 @@ fn parse_query(query: &str) -> HashMap<String, String> {
 }
 
 fn handle_bridge_request(stream: TcpStream, app: &AppHandle, state: &BridgeState) {
-    let mut reader = BufReader::new(match stream.try_clone() {
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
+
+    let cloned = match stream.try_clone() {
         Ok(s) => s,
         Err(_) => return,
-    });
+    };
+    let _ = cloned.set_read_timeout(Some(Duration::from_secs(5)));
+    let _ = cloned.set_write_timeout(Some(Duration::from_secs(5)));
+    let mut reader = BufReader::new(cloned);
 
     let mut first_line = String::new();
     if reader.read_line(&mut first_line).is_err() || first_line.is_empty() {
@@ -450,7 +456,11 @@ fn start_bridge_server(app: AppHandle, state: BridgeState) -> Result<(), String>
             let Ok(stream) = incoming else {
                 continue;
             };
-            handle_bridge_request(stream, &app, &state);
+            let app_handle = app.clone();
+            let bridge_state = state.clone();
+            thread::spawn(move || {
+                handle_bridge_request(stream, &app_handle, &bridge_state);
+            });
         }
     });
 
