@@ -29,7 +29,7 @@ type GenerateDebugError = Error & {
 
 type GenerateDailyReportResult = {
   imageDataUrl: string;
-  source: 'tauri-global' | 'tauri-module' | 'bridge';
+  source: 'cloud-api' | 'tauri-global' | 'tauri-module';
   debugLogs: string[];
 };
 
@@ -105,6 +105,10 @@ function normalizeGenerateError(error: unknown) {
     return '还没有读取到生图密钥。请检查 `.env.local` 里的 `VORTEXAI_API_KEY`，然后重启应用。';
   }
 
+  if (rawMessage.includes('missing_image_api_key')) {
+    return '服务端还没有配置生图密钥，请联系管理员配置 IMAGE_API_KEY。';
+  }
+
   if (rawMessage.includes('API Key 无效') || rawMessage.includes('已过期')) {
     return '生图密钥不可用。请更换新的 `VORTEXAI_API_KEY` 后再试。';
   }
@@ -146,7 +150,39 @@ function normalizeGenerateError(error: unknown) {
 
 async function invokeGenerateDailyReportImage(prompt: string): Promise<GenerateDailyReportResult> {
   const debugLogs: string[] = [];
+  let cloudErrorMessage = '';
   appendDebugLog(debugLogs, `start promptLength=${prompt.length}`);
+  const gatewayUrl = (import.meta.env.VITE_IMAGE_GATEWAY_URL || '/api/daily-report-image').trim();
+
+  appendDebugLog(debugLogs, `try source=cloud-api url=${gatewayUrl}`);
+  try {
+    const response = await fetch(gatewayUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+
+    if (response.ok) {
+      const payload = (await response.json()) as { imageDataUrl?: string };
+      const imageDataUrl = (payload.imageDataUrl || '').trim();
+      if (!imageDataUrl) {
+        throw new Error('cloud_api_empty_image');
+      }
+      appendDebugLog(debugLogs, `success source=cloud-api urlLength=${imageDataUrl.length}`);
+      return { imageDataUrl, source: 'cloud-api', debugLogs };
+    }
+
+    const errorPayload = (await response.json().catch(() => ({}))) as { error?: string };
+    const message = errorPayload.error || `cloud_api_failed_${response.status}`;
+    cloudErrorMessage = message;
+    appendDebugLog(debugLogs, `fail source=cloud-api message=${message}`);
+  } catch (error) {
+    cloudErrorMessage = error instanceof Error ? error.message : String(error);
+    appendDebugLog(
+      debugLogs,
+      `fail source=cloud-api message=${cloudErrorMessage}`
+    );
+  }
 
   const tauriInvoke =
     (globalThis as { __TAURI__?: { core?: { invoke?: <T>(command: string, args?: unknown) => Promise<T> } } })
@@ -167,6 +203,10 @@ async function invokeGenerateDailyReportImage(prompt: string): Promise<GenerateD
     }
   }
 
+  if (!cloudErrorMessage.trim()) {
+    cloudErrorMessage = '当前环境不支持桌面端生图调用。';
+  }
+
   try {
     appendDebugLog(debugLogs, 'try source=tauri-module');
     const tauriCore = await import('@tauri-apps/api/core');
@@ -176,7 +216,7 @@ async function invokeGenerateDailyReportImage(prompt: string): Promise<GenerateD
       return { imageDataUrl, source: 'tauri-module', debugLogs };
     }
     appendDebugLog(debugLogs, 'skip source=tauri-module invoke-missing');
-    throw createGenerateError('当前环境不支持桌面端生图调用。', debugLogs);
+    throw createGenerateError(cloudErrorMessage, debugLogs);
   } catch (error) {
     if (error instanceof Error && 'debugLogs' in error) {
       throw error;
@@ -185,7 +225,7 @@ async function invokeGenerateDailyReportImage(prompt: string): Promise<GenerateD
       debugLogs,
       `fail source=tauri-module message=${error instanceof Error ? error.message : String(error)}`
     );
-    throw createGenerateError(error instanceof Error ? error.message : String(error), debugLogs);
+    throw createGenerateError(cloudErrorMessage || (error instanceof Error ? error.message : String(error)), debugLogs);
   }
 }
 

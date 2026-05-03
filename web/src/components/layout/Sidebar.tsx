@@ -9,7 +9,7 @@ import { LogOut, Plus } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { useStore } from '../../store/useStore';
-import { getIslandState } from '../../lib/islandBridge';
+import { getIslandState, isLocalBridgeEnabled } from '../../lib/islandBridge';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { getUserWithProfile, upsertUserProfile } from '../../lib/profileRepository';
 
@@ -75,6 +75,7 @@ export default function Sidebar() {
   };
 
   useEffect(() => {
+    if (!isLocalBridgeEnabled) return;
     let cancelled = false;
 
     const syncState = async () => {

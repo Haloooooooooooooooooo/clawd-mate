@@ -1,4 +1,10 @@
 const BRIDGE_BASE = 'http://127.0.0.1:43141';
+const bridgeEnvFlag = (import.meta.env.VITE_ENABLE_LOCAL_BRIDGE || '').toString().toLowerCase();
+const isTauriRuntime =
+  typeof window !== 'undefined' &&
+  Boolean((window as unknown as { __TAURI__?: unknown }).__TAURI__);
+
+export const isLocalBridgeEnabled = bridgeEnvFlag === '1' || bridgeEnvFlag === 'true' || isTauriRuntime;
 
 export interface BridgeSubtaskPayload {
   title: string;
@@ -18,6 +24,7 @@ export interface BridgeTaskPayload {
 }
 
 export async function getIslandState(): Promise<boolean | null> {
+  if (!isLocalBridgeEnabled) return null;
   try {
     const response = await fetch(`${BRIDGE_BASE}/island/state`, { method: 'GET' });
     if (!response.ok) return null;
@@ -29,6 +36,7 @@ export async function getIslandState(): Promise<boolean | null> {
 }
 
 export async function setIslandVisibility(visible: boolean): Promise<boolean | null> {
+  if (!isLocalBridgeEnabled) return null;
   try {
     const response = await fetch(
       `${BRIDGE_BASE}/island/${visible ? 'show' : 'hide'}`,
@@ -43,6 +51,7 @@ export async function setIslandVisibility(visible: boolean): Promise<boolean | n
 }
 
 export async function pushTaskFromWeb(task: BridgeTaskPayload): Promise<boolean> {
+  if (!isLocalBridgeEnabled) return false;
   try {
     const response = await fetch(`${BRIDGE_BASE}/tasks/create`, {
       method: 'POST',
@@ -59,6 +68,7 @@ export async function pushTaskFromWeb(task: BridgeTaskPayload): Promise<boolean>
 }
 
 export async function pullTasksForWeb(): Promise<BridgeTaskPayload[]> {
+  if (!isLocalBridgeEnabled) return [];
   try {
     const response = await fetch(`${BRIDGE_BASE}/tasks/pull?target=web`, { method: 'GET' });
     if (!response.ok) return [];

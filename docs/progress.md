@@ -330,13 +330,13 @@ npm run dev
 
 ### 阶段 A：网页端先独立可用（Vercel）
 
-- ⬜ A1. 移除网页端对本地桥接 `127.0.0.1:43141` 的硬依赖（轮询/推送/显隐接口改为 no-op 或 Supabase 路径）
+- ✅ A1. 移除网页端对本地桥接 `127.0.0.1:43141` 的硬依赖（轮询/推送/显隐接口改为 no-op 或 Supabase 路径）
   - 相关文件：`web/src/lib/islandBridge.ts`、`web/src/store/useStore.ts`、`web/src/App.tsx`
-- ⬜ A2. 将日报生图从 Tauri `invoke` 切换为云端函数调用（Supabase Edge Function 或 Vercel Function）
+- ✅ A2. 将日报生图从 Tauri `invoke` 切换为云端函数调用（Supabase Edge Function 或 Vercel Function）
   - 相关文件：`web/src/pages/DailyReportView.tsx`
-- ⬜ A3. 保留并验证日报生成限制逻辑（登录校验、今日有记录、每日最多 2 次）
+- ✅ A3. 保留并验证日报生成限制逻辑（登录校验、今日有记录、每日最多 2 次）
   - 相关文件：`web/src/lib/dailyReportGeneration.ts`、`web/src/store/useStore.ts`
-- ⬜ A4. 配置网页端生产环境变量并完成本地构建自测
+- ✅ A4. 配置网页端生产环境变量并完成本地构建自测
   - 必要变量：`VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY`、`VITE_DESKTOP_DOWNLOAD_URL`
 - ⬜ A5. 部署 `web` 到 Vercel（Root Directory=`web`），并完成线上回归
   - 验收点：任务/历史/日报生成可在纯浏览器环境使用
@@ -362,4 +362,4 @@ npm run dev
 
 ### 当前进行中
 
-- ⬜ 当前任务：A1. 移除网页端对本地桥接硬依赖
+- ⬜ 当前任务：A5. 部署 `web` 到 Vercel 并完成线上回归

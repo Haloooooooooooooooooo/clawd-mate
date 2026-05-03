@@ -10,7 +10,7 @@ import Sidebar from './components/layout/Sidebar';
 import Dashboard from './pages/Dashboard';
 import DailyReportView from './pages/DailyReportView';
 import { HistoryCardView } from './components/history/HistoryViews';
-import { pullTasksForWeb } from './lib/islandBridge';
+import { isLocalBridgeEnabled, pullTasksForWeb } from './lib/islandBridge';
 import { useStore } from './store/useStore';
 import LandingPage from './pages/LandingPage';
 
@@ -22,6 +22,7 @@ export default function App() {
   const clearToast = useStore((state) => state.clearToast);
 
   useEffect(() => {
+    if (!isLocalBridgeEnabled) return;
     let cancelled = false;
 
     const syncTasks = async () => {
