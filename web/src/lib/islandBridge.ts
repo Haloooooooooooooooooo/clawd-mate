@@ -3,8 +3,11 @@ const bridgeEnvFlag = (import.meta.env.VITE_ENABLE_LOCAL_BRIDGE || '').toString(
 const isTauriRuntime =
   typeof window !== 'undefined' &&
   Boolean((window as unknown as { __TAURI__?: unknown }).__TAURI__);
+const isBridgeForceDisabled = bridgeEnvFlag === '0' || bridgeEnvFlag === 'false';
 
-export const isLocalBridgeEnabled = bridgeEnvFlag === '1' || bridgeEnvFlag === 'true' || isTauriRuntime;
+// Web should auto-attempt localhost bridge so downloaded Island can sync with browser out of box.
+// If desktop app is not running, all bridge APIs fail softly and return fallback values.
+export const isLocalBridgeEnabled = !isBridgeForceDisabled;
 
 export interface BridgeSubtaskPayload {
   title: string;

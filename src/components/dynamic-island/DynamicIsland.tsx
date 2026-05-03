@@ -8,6 +8,12 @@ import { CollapsedView } from './CollapsedView';
 import { ExpandedView } from './ExpandedView';
 import { type PetStatus, PetSprite } from '@pet';
 
+const webDashboardUrl = (import.meta.env.VITE_WEB_DASHBOARD_URL || '').trim();
+const fallbackWebDashboardUrl = 'https://clawdmate.vercel.app/app/dashboard';
+const normalizedWebDashboardUrl = webDashboardUrl
+  ? (webDashboardUrl.startsWith('http') ? webDashboardUrl : `https://${webDashboardUrl}`)
+  : fallbackWebDashboardUrl;
+
 interface DynamicIslandProps {
   onRequestCreate?: () => void;
   onLayoutModeChange?: (mode: 'idle' | 'collapsed' | 'expanded') => void;
@@ -439,16 +445,7 @@ export function DynamicIsland({
   };
 
   const handleGoHome = async () => {
-    try {
-      const response = await fetch('http://127.0.0.1:43141/dashboard/show', { method: 'POST' });
-      if (response.ok) {
-        return;
-      }
-    } catch {
-      // Ignore bridge errors and use browser fallback.
-    }
-
-    window.open('http://127.0.0.1:5173/app/dashboard', '_blank', 'noopener,noreferrer');
+    window.open(normalizedWebDashboardUrl, '_blank', 'noopener,noreferrer');
   };
 
   if (!activeTask) {

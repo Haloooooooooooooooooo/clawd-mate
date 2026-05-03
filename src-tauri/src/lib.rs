@@ -13,10 +13,8 @@ use std::sync::{
 };
 use std::thread;
 use tauri::{
-    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Size, WebviewUrl,
-    WebviewWindowBuilder,
+    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Size,
 };
-use tauri::Url;
 
 fn position_main_window_at_top_center(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     if let Some(monitor) = window.current_monitor()? {
@@ -29,61 +27,6 @@ fn position_main_window_at_top_center(window: &tauri::WebviewWindow) -> tauri::R
     }
 
     Ok(())
-}
-
-fn dashboard_navigation_script() -> &'static str {
-    r#"
-      (function () {
-        const targetPath = '/app/dashboard';
-        const targetUrl = new URL(targetPath, window.location.origin).toString();
-        if (window.location.pathname !== targetPath) {
-          window.location.replace(targetUrl);
-        } else {
-          window.location.replace(targetUrl);
-        }
-      })();
-    "#
-}
-
-fn ensure_dashboard_window(app: &AppHandle) -> tauri::Result<tauri::WebviewWindow> {
-    if let Some(window) = app.get_webview_window("dashboard") {
-        return Ok(window);
-    }
-
-    #[cfg(debug_assertions)]
-    let dashboard_window = {
-        let dashboard_url = Url::parse("http://127.0.0.1:5173").expect("invalid dashboard dev url");
-        WebviewWindowBuilder::new(app, "dashboard", WebviewUrl::External(dashboard_url))
-            .title("ClawdMate")
-            .inner_size(1440.0, 960.0)
-            .min_inner_size(1080.0, 720.0)
-            .resizable(true)
-            .decorations(true)
-            .transparent(false)
-            .always_on_top(false)
-            .center()
-            .build()?
-    };
-
-    #[cfg(not(debug_assertions))]
-    let dashboard_window = {
-        WebviewWindowBuilder::new(
-            app,
-            "dashboard",
-            WebviewUrl::App(PathBuf::from("index.html")),
-        )
-        .title("ClawdMate")
-        .inner_size(1440.0, 960.0)
-        .min_inner_size(1080.0, 720.0)
-        .resizable(true)
-        .decorations(true)
-        .transparent(false)
-        .always_on_top(false)
-        .center()
-        .build()?
-    };
-
-    Ok(dashboard_window)
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -288,23 +231,12 @@ fn handle_bridge_request(stream: TcpStream, app: &AppHandle, state: &BridgeState
             let _ = write_response(stream, "200 OK", "application/json", &body);
         }
         ("POST", "/dashboard/show") => {
-            match ensure_dashboard_window(&app) {
-                Ok(dashboard_window) => {
-                let _ = dashboard_window.unminimize();
-                let _ = dashboard_window.show();
-                let _ = dashboard_window.set_focus();
-                let _ = dashboard_window.eval(dashboard_navigation_script());
-                let _ = write_response(stream, "200 OK", "application/json", r#"{"ok":true}"#);
-                }
-                Err(_) => {
-                let _ = write_response(
-                    stream,
-                    "500 Internal Server Error",
-                    "application/json",
-                    r#"{"error":"dashboard_open_failed"}"#,
-                );
-                }
-            }
+            let _ = write_response(
+                stream,
+                "410 Gone",
+                "application/json",
+                r#"{"error":"dashboard_window_removed"}"#,
+            );
         }
         ("POST", "/tasks/create") => {
             let parsed = serde_json::from_str::<TaskSyncEnvelope>(&body);
@@ -735,15 +667,6 @@ pub fn run() {
             bridge_state.island_visible.store(true, Ordering::Relaxed);
             start_bridge_server(app.handle().clone(), bridge_state)
                 .map_err(|error| tauri::Error::AssetNotFound(error))?;
-
-            let _ = ensure_dashboard_window(&app.handle())?;
-
-            #[cfg(debug_assertions)]
-            {
-                if let Some(dashboard_window) = app.get_webview_window("dashboard") {
-                    dashboard_window.open_devtools();
-                }
-            }
 
             Ok(())
         })
