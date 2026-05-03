@@ -33,25 +33,10 @@ type GenerateDailyReportResult = {
   debugLogs: string[];
 };
 
-async function resolveReportImageBlob(imageUrl: string): Promise<Blob> {
-  if (imageUrl.startsWith('data:')) {
-    const response = await fetch(imageUrl);
-    return response.blob();
-  }
-
-  const response = await fetch(imageUrl);
-  if (!response.ok) {
-    throw new Error(`image_fetch_failed_${response.status}`);
-  }
-  return response.blob();
-}
-
 function triggerDirectDownload(url: string, filename: string) {
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
-  link.rel = 'noopener noreferrer';
-  link.target = '_blank';
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -424,23 +409,7 @@ export default function DailyReportView() {
     const filename = `clawdmate-report-${selectedDate}.png`;
 
     try {
-      // Data/blob URLs are safe to download directly.
-      if (generatedImageUrl.startsWith('data:') || generatedImageUrl.startsWith('blob:')) {
-        triggerDirectDownload(generatedImageUrl, filename);
-        showToast('日报图片已开始下载');
-        return;
-      }
-
-      // For cross-origin URLs (e.g. OSS without CORS), direct download works better than fetch->blob.
-      triggerDirectDownload(generatedImageUrl, filename);
-      showToast('日报图片已开始下载');
-      return;
-    } catch (error) {
-      console.error('[daily-report] direct download failed', error);
-    }
-
-    try {
-      // Fallback: fetch as blob when direct method is blocked.
+      // Always prefer blob download to keep user in-browser and avoid navigation.
       let downloadUrl = generatedImageUrl;
       let tempObjectUrl: string | null = null;
 
@@ -467,7 +436,7 @@ export default function DailyReportView() {
       showToast('日报图片已开始下载');
     } catch (error) {
       console.error('[daily-report] download failed', error);
-      showToast('下载失败，请稍后重试');
+      showToast('下载失败：当前图片链接不支持浏览器直下');
     }
   };
 
@@ -477,64 +446,12 @@ export default function DailyReportView() {
       return;
     }
 
-    const filename = `clawdmate-report-${selectedDate}.png`;
-
     try {
-      const nav = navigator as Navigator & {
-        canShare?: (data: ShareData) => boolean;
-      };
-
-      if (typeof nav.share === 'function') {
-        const baseShareData: ShareData = {
-          title: `ClawdMate 日报 ${selectedDate}`,
-          text: `这是我在 ClawdMate 生成的每日复盘 (${selectedDate})`
-        };
-
-        // For remote URLs, share URL/text directly to avoid CORS fetch failures.
-        if (!generatedImageUrl.startsWith('data:') && !generatedImageUrl.startsWith('blob:')) {
-          const urlShareData: ShareData = {
-            ...baseShareData,
-            url: generatedImageUrl
-          };
-          await nav.share(urlShareData);
-          showToast('已打开系统分享');
-          return;
-        }
-
-        const blob = await resolveReportImageBlob(generatedImageUrl);
-        const file = new File([blob], filename, { type: blob.type || 'image/png' });
-        const fileShareData: ShareData = {
-          ...baseShareData,
-          files: [file]
-        };
-        if (!nav.canShare || nav.canShare(fileShareData)) {
-          await nav.share(fileShareData);
-          showToast('已打开系统分享');
-          return;
-        }
-      }
-
-      // Clipboard image requires blob; skip this path for cross-origin URLs without CORS.
-      const clipboard = navigator.clipboard as Clipboard & {
-        write?: (data: ClipboardItem[]) => Promise<void>;
-      };
-      if (
-        typeof clipboard?.write === 'function' &&
-        typeof ClipboardItem !== 'undefined' &&
-        (generatedImageUrl.startsWith('data:') || generatedImageUrl.startsWith('blob:'))
-      ) {
-        const blob = await resolveReportImageBlob(generatedImageUrl);
-        const file = new File([blob], filename, { type: blob.type || 'image/png' });
-        await clipboard.write([new ClipboardItem({ [file.type || 'image/png']: file })]);
-        showToast('浏览器不支持系统分享，已复制图片到剪贴板');
-        return;
-      }
-
-      await handleDownloadReport();
-      showToast('浏览器不支持系统分享，已为你下载图片');
+      await navigator.clipboard.writeText(generatedImageUrl);
+      showToast('已复制图片链接');
     } catch (error) {
       console.error('[daily-report] share failed', error);
-      showToast('分享失败，请稍后重试');
+      showToast('复制失败，请稍后重试');
     }
   };
 
