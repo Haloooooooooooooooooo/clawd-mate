@@ -9,7 +9,7 @@ import { ExpandedView } from './ExpandedView';
 import { type PetStatus, PetSprite } from '@pet';
 
 const webDashboardUrl = (import.meta.env.VITE_WEB_DASHBOARD_URL || '').trim();
-const fallbackWebDashboardUrl = 'https://clawdmate.vercel.app/app/dashboard';
+const fallbackWebDashboardUrl = 'https://clawd-mate.vercel.app/app/dashboard';
 const normalizedWebDashboardUrl = webDashboardUrl
   ? (webDashboardUrl.startsWith('http') ? webDashboardUrl : `https://${webDashboardUrl}`)
   : fallbackWebDashboardUrl;
@@ -445,6 +445,19 @@ export function DynamicIsland({
   };
 
   const handleGoHome = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:43141/dashboard/show', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: normalizedWebDashboardUrl })
+      });
+      if (response.ok) {
+        return;
+      }
+    } catch {
+      // Ignore bridge errors and fallback to browser open.
+    }
+
     window.open(normalizedWebDashboardUrl, '_blank', 'noopener,noreferrer');
   };
 
@@ -651,6 +664,7 @@ export function DynamicIsland({
               onExtend={handleExtend}
               onCancel={handleCancel}
               onExpand={() => setIsExpanded(true)}
+              onGoHome={handleGoHome}
               onCloseIsland={handleCloseIsland}
               petStatus={currentPetStatus}
             />

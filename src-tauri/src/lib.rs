@@ -6,6 +6,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::Duration;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -67,6 +68,11 @@ struct TaskSyncEnvelope {
 #[derive(Deserialize)]
 struct ReportGenerateEnvelope {
     prompt: String,
+}
+
+#[derive(Deserialize)]
+struct OpenDashboardEnvelope {
+    url: String,
 }
 
 #[derive(Deserialize)]
@@ -231,12 +237,56 @@ fn handle_bridge_request(stream: TcpStream, app: &AppHandle, state: &BridgeState
             let _ = write_response(stream, "200 OK", "application/json", &body);
         }
         ("POST", "/dashboard/show") => {
-            let _ = write_response(
-                stream,
-                "410 Gone",
-                "application/json",
-                r#"{"error":"dashboard_window_removed"}"#,
-            );
+            let parsed = serde_json::from_str::<OpenDashboardEnvelope>(&body);
+            let Ok(envelope) = parsed else {
+                let _ = write_response(
+                    stream,
+                    "400 Bad Request",
+                    "application/json",
+                    r#"{"error":"invalid_body"}"#,
+                );
+                return;
+            };
+
+            let url = envelope.url.trim();
+            if url.is_empty() {
+                let _ = write_response(
+                    stream,
+                    "400 Bad Request",
+                    "application/json",
+                    r#"{"error":"missing_url"}"#,
+                );
+                return;
+            }
+
+            let open_result = if cfg!(target_os = "windows") {
+                Command::new("cmd")
+                    .args(["/C", "start", "", url])
+                    .spawn()
+            } else if cfg!(target_os = "macos") {
+                Command::new("open").arg(url).spawn()
+            } else {
+                Command::new("xdg-open").arg(url).spawn()
+            };
+
+            match open_result {
+                Ok(_) => {
+                    let _ = write_response(stream, "200 OK", "application/json", r#"{"ok":true}"#);
+                }
+                Err(error) => {
+                    let body = serde_json::json!({
+                        "error": "open_dashboard_failed",
+                        "message": error.to_string()
+                    })
+                    .to_string();
+                    let _ = write_response(
+                        stream,
+                        "500 Internal Server Error",
+                        "application/json",
+                        &body,
+                    );
+                }
+            }
         }
         ("POST", "/tasks/create") => {
             let parsed = serde_json::from_str::<TaskSyncEnvelope>(&body);

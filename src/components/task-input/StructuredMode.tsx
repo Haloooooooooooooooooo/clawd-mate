@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { v4 as uuidv4 } from 'uuid';
 import { useTaskStore } from '../../stores/taskStore';
@@ -23,6 +23,7 @@ export function StructuredMode({
   const [duration, setDuration] = useState(60);
   const [useCustom, setUseCustom] = useState(false);
   const [subTaskInputs, setSubTaskInputs] = useState<string[]>(['']);
+  const subTaskInputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
   const addTask = useTaskStore((state) => state.addTask);
   const setActiveTask = useTaskStore((state) => state.setActiveTask);
@@ -34,12 +35,32 @@ export function StructuredMode({
   const removeSubTaskInput = (index: number) => {
     if (subTaskInputs.length <= 1) return;
     setSubTaskInputs(subTaskInputs.filter((_, i) => i !== index));
+    subTaskInputRefs.current = subTaskInputRefs.current.filter((_, i) => i !== index);
   };
 
   const updateSubTaskInput = (index: number, value: string) => {
     const nextInputs = [...subTaskInputs];
     nextInputs[index] = value;
     setSubTaskInputs(nextInputs);
+  };
+
+  const focusSubTaskInput = (index: number) => {
+    window.requestAnimationFrame(() => {
+      subTaskInputRefs.current[index]?.focus();
+    });
+  };
+
+  const handleSubTaskEnter = (index: number) => {
+    if (!subTaskInputs[index]?.trim()) return;
+
+    const nextIndex = index + 1;
+    if (nextIndex < subTaskInputs.length) {
+      focusSubTaskInput(nextIndex);
+      return;
+    }
+
+    setSubTaskInputs((prev) => [...prev, '']);
+    focusSubTaskInput(nextIndex);
   };
 
   const handleStart = () => {
@@ -94,6 +115,7 @@ export function StructuredMode({
     setDuration(60);
     setUseCustom(false);
     setSubTaskInputs(['']);
+    subTaskInputRefs.current = [];
   };
 
   return (
@@ -156,9 +178,17 @@ export function StructuredMode({
                   {index + 1}
                 </span>
                 <input
+                  ref={(element) => {
+                    subTaskInputRefs.current[index] = element;
+                  }}
                   type="text"
                   value={input}
                   onChange={(event) => updateSubTaskInput(index, event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter') return;
+                    event.preventDefault();
+                    handleSubTaskEnter(index);
+                  }}
                   placeholder={`子任务 ${index + 1}...`}
                   className="island-input flex-1 !py-1.5 text-sm"
                 />
@@ -167,7 +197,7 @@ export function StructuredMode({
                     onClick={() => removeSubTaskInput(index)}
                     className="text-sm text-white/40 transition-colors hover:text-red-400"
                   >
-                    ✕
+                    x
                   </button>
                 )}
               </div>
@@ -187,3 +217,4 @@ export function StructuredMode({
     </motion.div>
   );
 }
+

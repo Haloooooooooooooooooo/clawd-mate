@@ -45,14 +45,27 @@ function normalizeError(status, bodyText) {
 }
 
 async function fetchReferenceImage(origin, configuredUrl) {
-  const targetUrl = configuredUrl || `${origin}/clawd-ref.png`;
-  const response = await fetch(targetUrl);
-  if (!response.ok) {
-    throw new Error(`reference_image_fetch_failed_${response.status}`);
+  const candidates = configuredUrl
+    ? [configuredUrl]
+    : [`${origin}/clawd-ref.png`, `${origin}/clawd.png`];
+
+  let lastError = null;
+  for (const targetUrl of candidates) {
+    try {
+      const response = await fetch(targetUrl);
+      if (!response.ok) {
+        lastError = new Error(`reference_image_fetch_failed_${response.status}`);
+        continue;
+      }
+      const contentType = response.headers.get('content-type') || 'image/png';
+      const fileData = await response.arrayBuffer();
+      return new Blob([fileData], { type: contentType });
+    } catch (error) {
+      lastError = error;
+    }
   }
-  const contentType = response.headers.get('content-type') || 'image/png';
-  const fileData = await response.arrayBuffer();
-  return new Blob([fileData], { type: contentType });
+
+  throw lastError || new Error('reference_image_fetch_failed');
 }
 
 async function callImageEditsApi({ apiHost, apiKey, model, prompt, referenceImageBlob }) {

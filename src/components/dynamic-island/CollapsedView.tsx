@@ -15,6 +15,7 @@ interface CollapsedViewProps {
   onExtend: (minutes: number) => void
   onCancel: () => void
   onExpand: () => void
+  onGoHome: () => void
   onCloseIsland: () => void
   petStatus: PetStatus
 }
@@ -30,6 +31,7 @@ export function CollapsedView({
   onExtend,
   onCancel,
   onExpand,
+  onGoHome,
   onCloseIsland,
   petStatus,
 }: CollapsedViewProps) {
@@ -101,9 +103,17 @@ export function CollapsedView({
           <div className="min-w-0 flex-1">
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <div className="min-w-0">
-                <div className="truncate text-[13px] font-semibold text-white/90">
+                <button
+                  type="button"
+                  data-no-drag="true"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onGoHome()
+                  }}
+                  className="truncate text-[13px] font-semibold text-[#74fbe0] hover:text-[#a2ffec] transition-colors"
+                >
                   {task.title}
-                </div>
+                </button>
                 <div className={`-mt-0.5 text-[11px] ${isOvertime ? 'font-semibold text-orange-400' : 'text-white/60'}`}>
                   {timeText}
                 </div>

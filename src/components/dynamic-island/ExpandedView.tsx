@@ -104,7 +104,14 @@ export function ExpandedView({
               </div>
               <div className="min-w-0">
                 <div className="truncate text-[14px] font-semibold text-white/92">{task.title}</div>
-                <div className="text-[11px] text-white/55">Desktop island is running</div>
+                <button
+                  type="button"
+                  data-no-drag="true"
+                  onClick={onGoHome}
+                  className="text-[11px] text-[#74fbe0] hover:text-[#a2ffec] transition-colors"
+                >
+                  vibecoding
+                </button>
               </div>
             </div>
             <button

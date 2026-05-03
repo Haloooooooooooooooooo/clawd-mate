@@ -157,13 +157,12 @@ export const useTaskStore = create<TaskStore>()(
             const allResolved =
               subTasks.length > 0 && subTasks.every((st) => st.status === 'completed' || st.status === 'skipped');
             if (allResolved) {
-              const allSkipped = subTasks.every((st) => st.status === 'skipped');
-              shouldClearActive = state.activeTaskId === task.id;
+              // Keep structured task visible/controllable in expanded island when the last subtask finishes.
+              // User can explicitly complete/cancel from the main action buttons.
               return {
                 ...task,
                 subTasks,
-                status: allSkipped ? ('cancelled' as const) : ('completed' as const),
-                completedAt: new Date()
+                status: 'paused' as const
               };
             }
 
@@ -199,24 +198,20 @@ export const useTaskStore = create<TaskStore>()(
 
             const allSkipped = subTasks.length > 0 && subTasks.every((st) => st.status === 'skipped');
             if (allSkipped) {
-              shouldClearActive = state.activeTaskId === task.id;
               return {
                 ...task,
                 subTasks,
-                status: 'cancelled' as const,
-                completedAt: new Date()
+                status: 'paused' as const
               };
             }
 
             const allResolved =
               subTasks.length > 0 && subTasks.every((st) => st.status === 'completed' || st.status === 'skipped');
             if (allResolved) {
-              shouldClearActive = state.activeTaskId === task.id;
               return {
                 ...task,
                 subTasks,
-                status: 'completed' as const,
-                completedAt: new Date()
+                status: 'paused' as const
               };
             }
 
